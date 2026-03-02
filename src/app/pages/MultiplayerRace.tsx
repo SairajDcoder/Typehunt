@@ -3,133 +3,165 @@ import { useNavigate, useParams } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, Medal } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { socketService } from '../services/socket';
 import { TypeHuntButton } from '../components/TypeHuntButton';
 
 interface RacePlayer {
-  id: string;
-  name: string;
+  userId: string;
+  username: string;
   progress: number;
   wpm: number;
+  accuracy: number;
   finished: boolean;
   position?: number;
 }
-
-const SAMPLE_TEXT = "the quick brown fox jumps over the lazy dog and runs through the forest with great speed while avoiding all obstacles that come its way during this amazing adventure".split(' ');
 
 const MultiplayerRace: React.FC = () => {
   const navigate = useNavigate();
   const { lobbyId } = useParams();
   const { colors } = useTheme();
-  const [countdown, setCountdown] = useState(3);
+  const { user } = useAuth();
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [raceStarted, setRaceStarted] = useState(false);
   const [raceFinished, setRaceFinished] = useState(false);
   const [input, setInput] = useState('');
+  const [words, setWords] = useState<string[]>([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const [startTime, setStartTime] = useState<number | null>(null);
+  const [correctWords, setCorrectWords] = useState(0);
+  const [totalKeystrokes, setTotalKeystrokes] = useState(0);
+  const [correctKeystrokes, setCorrectKeystrokes] = useState(0);
+  const [players, setPlayers] = useState<RacePlayer[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  
-  const [players, setPlayers] = useState<RacePlayer[]>([
-    { id: '1', name: 'You', progress: 0, wpm: 0, finished: false },
-    { id: '2', name: 'Player 2', progress: 0, wpm: 0, finished: false },
-    { id: '3', name: 'Player 3', progress: 0, wpm: 0, finished: false },
-  ]);
 
   useEffect(() => {
-    const countdownInterval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev === 1) {
-          setRaceStarted(true);
-          setStartTime(Date.now());
-          inputRef.current?.focus();
-          clearInterval(countdownInterval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    // Listen for countdown from server
+    const handleCountdown = (data: { count: number }) => {
+      setCountdown(data.count);
+    };
 
-    return () => clearInterval(countdownInterval);
-  }, []);
+    // Listen for game start (after countdown finishes, server sends words)
+    const handleGameStarted = (data: { words: string[]; players: any[]; startTime: number }) => {
+      setCountdown(null);
+      setWords(data.words);
+      setRaceStarted(true);
+      setPlayers(
+        data.players.map((p: any) => ({
+          userId: p.userId,
+          username: p.username,
+          progress: 0,
+          wpm: 0,
+          accuracy: 100,
+          finished: false,
+        }))
+      );
+      // Focus input after state updates
+      setTimeout(() => inputRef.current?.focus(), 100);
+    };
 
-  // Simulate other players progress
-  useEffect(() => {
-    if (!raceStarted || raceFinished) return;
-
-    const interval = setInterval(() => {
+    // Live progress updates from other players
+    const handleProgressUpdate = (data: { players: any[] }) => {
       setPlayers((prev) =>
         prev.map((p) => {
-          if (p.id === '1') return p; // Don't simulate for current player
-          
-          const newProgress = Math.min(p.progress + Math.random() * 3, 100);
-          const finished = newProgress >= 100;
-          
-          return {
-            ...p,
-            progress: newProgress,
-            wpm: Math.floor(60 + Math.random() * 40),
-            finished,
-          };
+          const update = data.players.find((u: any) => u.userId === p.userId);
+          return update
+            ? { ...p, progress: update.progress, wpm: update.wpm, accuracy: update.accuracy, finished: update.finished }
+            : p;
         })
       );
-    }, 500);
+    };
 
-    return () => clearInterval(interval);
-  }, [raceStarted, raceFinished]);
+    // A player finished
+    const handlePlayerFinished = (data: { userId: string; wpm: number; accuracy: number }) => {
+      setPlayers((prev) =>
+        prev.map((p) =>
+          p.userId === data.userId
+            ? { ...p, finished: true, wpm: data.wpm, accuracy: data.accuracy }
+            : p
+        )
+      );
+    };
 
-  // Check if race is finished
-  useEffect(() => {
-    const allFinished = players.every(p => p.finished);
-    if (allFinished && raceStarted && !raceFinished) {
+    // Game ended — show results
+    const handleGameEnded = (data: { results: any[]; winnerUsername: string }) => {
       setRaceFinished(true);
-      
-      // Assign positions
-      const sortedPlayers = [...players].sort((a, b) => {
-        if (a.finished && !b.finished) return -1;
-        if (!a.finished && b.finished) return 1;
-        return b.progress - a.progress;
-      });
-      
-      setPlayers(sortedPlayers.map((p, i) => ({ ...p, position: i + 1 })));
-    }
-  }, [players, raceStarted, raceFinished]);
+      setPlayers(
+        data.results.map((r: any) => ({
+          userId: r.userId,
+          username: r.username,
+          progress: r.progress,
+          wpm: r.wpm,
+          accuracy: r.accuracy,
+          finished: r.finished,
+          position: r.position,
+        }))
+      );
+    };
+
+    // A player disconnected
+    const handlePlayerDisconnected = (data: { userId: string }) => {
+      setPlayers((prev) =>
+        prev.map((p) =>
+          p.userId === data.userId ? { ...p, finished: true, wpm: 0 } : p
+        )
+      );
+    };
+
+    socketService.on('game:countdown', handleCountdown);
+    socketService.on('game:started', handleGameStarted);
+    socketService.on('game:progressUpdate', handleProgressUpdate);
+    socketService.on('game:playerFinished', handlePlayerFinished);
+    socketService.on('game:ended', handleGameEnded);
+    socketService.on('game:playerDisconnected', handlePlayerDisconnected);
+
+    return () => {
+      socketService.off('game:countdown', handleCountdown);
+      socketService.off('game:started', handleGameStarted);
+      socketService.off('game:progressUpdate', handleProgressUpdate);
+      socketService.off('game:playerFinished', handlePlayerFinished);
+      socketService.off('game:ended', handleGameEnded);
+      socketService.off('game:playerDisconnected', handlePlayerDisconnected);
+    };
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!raceStarted || raceFinished) return;
-    
+
     const value = e.target.value;
+    const newTotalKeystrokes = totalKeystrokes + 1;
+    setTotalKeystrokes(newTotalKeystrokes);
 
     if (value.endsWith(' ')) {
       const typedWord = value.trim();
-      const currentWord = SAMPLE_TEXT[currentWordIndex];
-      
-      if (typedWord === currentWord) {
-        const newIndex = currentWordIndex + 1;
-        setCurrentWordIndex(newIndex);
-        
-        const progress = (newIndex / SAMPLE_TEXT.length) * 100;
-        const elapsed = startTime ? (Date.now() - startTime) / 1000 / 60 : 1;
-        const wpm = Math.round(newIndex / elapsed);
-        
-        setPlayers((prev) =>
-          prev.map((p) =>
-            p.id === '1'
-              ? { ...p, progress, wpm, finished: progress >= 100 }
-              : p
-          )
-        );
-        
-        if (newIndex >= SAMPLE_TEXT.length) {
-          // Player finished!
-        }
-      }
+      const currentWord = words[currentWordIndex];
+
+      const isCorrect = typedWord === currentWord;
+      const newCorrectWords = correctWords + (isCorrect ? 1 : 0);
+      const newCorrectKeystrokes = correctKeystrokes + (isCorrect ? currentWord.length : 0);
+      const newIndex = currentWordIndex + 1;
+
+      setCorrectWords(newCorrectWords);
+      setCorrectKeystrokes(newCorrectKeystrokes);
+      setCurrentWordIndex(newIndex);
+
+      // Send progress to server
+      socketService.sendProgress({
+        code: lobbyId!,
+        currentWordIndex: newIndex,
+        correctWords: newCorrectWords,
+        totalKeystrokes: newTotalKeystrokes,
+        correctKeystrokes: newCorrectKeystrokes,
+      });
+
       setInput('');
     } else {
       setInput(value);
     }
   };
 
-  const currentPlayer = players.find(p => p.id === '1');
-  const winner = players.find(p => p.position === 1);
+  const winner = players
+    .filter((p) => p.position)
+    .sort((a, b) => (a.position || 99) - (b.position || 99))[0];
 
   return (
     <div
@@ -138,13 +170,13 @@ const MultiplayerRace: React.FC = () => {
         background: `linear-gradient(135deg, ${colors.primaryDark} 0%, ${colors.primaryMid} 100%)`,
       }}
     >
-      {/* Countdown */}
+      {/* Countdown Overlay */}
       <AnimatePresence>
-        {countdown > 0 && (
+        {countdown !== null && countdown > 0 && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 2 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-sm"
           >
             <motion.div
@@ -152,7 +184,7 @@ const MultiplayerRace: React.FC = () => {
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 1.5, opacity: 0 }}
-              className="text-9xl text-white"
+              className="text-9xl text-white font-bold"
             >
               {countdown}
             </motion.div>
@@ -160,63 +192,84 @@ const MultiplayerRace: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Race Progress */}
-      <div className="max-w-6xl mx-auto mb-8">
-        <h1 className="text-3xl text-white mb-6 text-center">Race in Progress</h1>
-        <div className="space-y-4">
-          {players.map((player, index) => (
-            <motion.div
-              key={player.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="relative"
-            >
-              <div className="flex items-center gap-3 mb-2">
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm"
-                  style={{ 
-                    backgroundColor: player.id === '1' 
-                      ? colors.highlightAccent || colors.accent 
-                      : colors.primaryMid 
-                  }}
-                >
-                  {player.name[0]}
-                </div>
-                <span className="text-white">{player.name}</span>
-                <span className="text-white/60 text-sm ml-auto">{player.wpm} WPM</span>
-              </div>
-              <div className="relative w-full h-12 bg-white/10 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full flex items-center justify-end pr-2"
-                  style={{
-                    backgroundColor: player.id === '1' && player.progress === Math.max(...players.map(p => p.progress))
-                      ? colors.highlightAccent || colors.accent
-                      : colors.accent,
-                  }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${player.progress}%` }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {player.finished && (
-                    <Trophy size={24} color="white" />
-                  )}
-                </motion.div>
-              </div>
-            </motion.div>
-          ))}
+      {/* Waiting state (before countdown starts) */}
+      {!raceStarted && countdown === null && (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center"
+          >
+            <div className="text-3xl text-white mb-4">Waiting for game to start...</div>
+            <div className="text-white/60">The host is starting the game</div>
+          </motion.div>
         </div>
-      </div>
+      )}
+
+      {/* Race Progress Bars */}
+      {(raceStarted || raceFinished) && (
+        <div className="max-w-6xl mx-auto mb-8">
+          <h1 className="text-3xl text-white mb-6 text-center">
+            {raceFinished ? 'Race Complete!' : 'Race in Progress'}
+          </h1>
+          <div className="space-y-4">
+            {players.map((player, index) => (
+              <motion.div
+                key={player.userId}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="relative"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm"
+                    style={{
+                      backgroundColor:
+                        player.userId === user?.id
+                          ? colors.highlightAccent || colors.accent
+                          : colors.primaryMid,
+                    }}
+                  >
+                    {player.username?.[0]?.toUpperCase()}
+                  </div>
+                  <span className="text-white">
+                    {player.username}
+                    {player.userId === user?.id && ' (you)'}
+                  </span>
+                  <span className="text-white/60 text-sm ml-auto">{player.wpm} WPM</span>
+                </div>
+                <div className="relative w-full h-12 bg-white/10 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full flex items-center justify-end pr-2"
+                    style={{
+                      backgroundColor:
+                        player.userId === user?.id
+                          ? colors.highlightAccent || colors.accent
+                          : colors.accent,
+                    }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${player.progress}%` }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {player.finished && <Trophy size={24} color="white" />}
+                  </motion.div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Typing Area */}
-      {raceStarted && !raceFinished && (
+      {raceStarted && !raceFinished && words.length > 0 && (
         <div className="max-w-4xl mx-auto">
           <div
             className="p-8 rounded-2xl shadow-2xl"
             style={{ backgroundColor: colors.primaryMid }}
           >
             <div className="mb-6 text-2xl text-white/80 leading-relaxed font-mono flex flex-wrap gap-2">
-              {SAMPLE_TEXT.map((word, index) => (
+              {words.map((word, index) => (
                 <span
                   key={index}
                   className={
@@ -269,25 +322,32 @@ const MultiplayerRace: React.FC = () => {
                   animate={{ scale: 1, rotate: 360 }}
                   transition={{ delay: 0.2, type: 'spring' }}
                 >
-                  <Trophy size={80} color={colors.highlightAccent || colors.accent} className="mx-auto mb-4" />
+                  <Trophy
+                    size={80}
+                    color={colors.highlightAccent || colors.accent}
+                    className="mx-auto mb-4"
+                  />
                 </motion.div>
                 <h2 className="text-5xl text-white mb-2">Race Complete!</h2>
-                <p className="text-2xl text-white/80">
-                  {winner?.name} wins with {winner?.wpm} WPM!
-                </p>
+                {winner && (
+                  <p className="text-2xl text-white/80">
+                    {winner.username} wins with {winner.wpm} WPM!
+                  </p>
+                )}
               </div>
 
               <div className="space-y-3 mb-8">
                 {players
-                  .sort((a, b) => (a.position || 0) - (b.position || 0))
+                  .sort((a, b) => (a.position || 99) - (b.position || 99))
                   .map((player) => (
                     <div
-                      key={player.id}
+                      key={player.userId}
                       className="flex items-center justify-between p-4 rounded-lg"
                       style={{
-                        backgroundColor: player.position === 1
-                          ? `${colors.highlightAccent || colors.accent}40`
-                          : 'rgba(255, 255, 255, 0.1)',
+                        backgroundColor:
+                          player.position === 1
+                            ? `${colors.highlightAccent || colors.accent}40`
+                            : 'rgba(255, 255, 255, 0.1)',
                       }}
                     >
                       <div className="flex items-center gap-3">
@@ -295,7 +355,7 @@ const MultiplayerRace: React.FC = () => {
                         {player.position === 2 && <Medal size={24} color="#C0C0C0" />}
                         {player.position === 3 && <Medal size={24} color="#CD7F32" />}
                         <span className="text-white text-xl">
-                          {player.position}. {player.name}
+                          {player.position}. {player.username}
                         </span>
                       </div>
                       <span className="text-white text-xl">{player.wpm} WPM</span>

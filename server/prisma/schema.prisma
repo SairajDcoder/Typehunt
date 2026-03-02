@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GameMode {
+  SINGLE
+  HARDCORE
+  MULTIPLAYER
+}
+
+enum LobbyStatus {
+  WAITING
+  IN_GAME
+  FINISHED
+  CLOSED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String?
+  googleId     String?  @unique
+  avatarUrl    String?
+  isAdmin      Boolean  @default(false)
+  isBanned     Boolean  @default(false)
+  banReason    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  gameResults       GameResult[]
+  hostedLobbies     Lobby[]              @relation("HostedLobbies")
+  matchParticipants MatchParticipant[]
+  wonMatches        MultiplayerMatch[]   @relation("MatchWinner")
+  ranking           Ranking?
+
+  @@index([email])
+  @@index([username])
+}
+
+model GameResult {
+  id         String   @id @default(cuid())
+  userId     String
+  mode       GameMode
+  wpm        Float
+  accuracy   Float
+  timeTaken  Float    // seconds
+  wordCount  Int
+  rawInput   String?  @db.Text
+  wordSet    String?  @db.Text // JSON string of words used
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([mode])
+  @@index([wpm])
+}
+
+model Lobby {
+  id          String      @id @default(cuid())
+  code        String      @unique @db.VarChar(6)
+  hostId      String
+  settings    Json        @default("{}")
+  status      LobbyStatus @default(WAITING)
+  playerLimit Int         @default(8)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  host    User               @relation("HostedLobbies", fields: [hostId], references: [id])
+  matches MultiplayerMatch[]
+
+  @@index([code])
+  @@index([status])
+}
+
+model MultiplayerMatch {
+  id        String   @id @default(cuid())
+  lobbyId   String
+  wordSet   Json     // Array of words
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+  winnerId  String?
+
+  lobby        Lobby              @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+  winner       User?              @relation("MatchWinner", fields: [winnerId], references: [id])
+  participants MatchParticipant[]
+
+  @@index([lobbyId])
+}
+
+model MatchParticipant {
+  id         String   @id @default(cuid())
+  matchId    String
+  userId     String
+  wpm        Float    @default(0)
+  accuracy   Float    @default(0)
+  progress   Float    @default(0)  // 0-100 percentage
+  finishedAt DateTime?
+  eloChange  Int      @default(0)
+  isDisconnected Boolean @default(false)
+
+  match MultiplayerMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+  @@index([matchId])
+  @@index([userId])
+}
+
+model Ranking {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  elo       Int      @default(1000)
+  wins      Int      @default(0)
+  losses    Int      @default(0)
+  gamesPlayed Int    @default(0)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([elo(sort: Desc)])
+}

@@ -3,25 +3,23 @@ import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { api } from '../services/api';
 import { TypeHuntButton } from '../components/TypeHuntButton';
 import { TypeHuntToggle } from '../components/TypeHuntToggle';
 import { TypeHuntModal } from '../components/TypeHuntModal';
 
-const SAMPLE_WORDS = [
-  'the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog', 'and', 'runs',
-  'through', 'forest', 'with', 'great', 'speed', 'while', 'avoiding', 'all', 'obstacles',
-  'that', 'come', 'its', 'way', 'during', 'this', 'amazing', 'adventure'
-];
-
 const SingleplayerScreen: React.FC = () => {
   const navigate = useNavigate();
   const { colors } = useTheme();
+  const { isAuthenticated } = useAuth();
   const [wordCount, setWordCount] = useState(25);
   const [punctuation, setPunctuation] = useState(false);
   const [numbers, setNumbers] = useState(false);
   const [capitalization, setCapitalization] = useState(false);
   const [words, setWords] = useState<string[]>([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  const [typedWords, setTypedWords] = useState<string[]>([]);
   const [input, setInput] = useState('');
   const [startTime, setStartTime] = useState<number | null>(null);
   const [timeElapsed, setTimeElapsed] = useState(0);
@@ -30,6 +28,8 @@ const SingleplayerScreen: React.FC = () => {
   const [isFinished, setIsFinished] = useState(false);
   const [wpm, setWpm] = useState(0);
   const [accuracy, setAccuracy] = useState(100);
+  const [serverResult, setServerResult] = useState<any>(null);
+  const [keystrokeTimestamps, setKeystrokeTimestamps] = useState<number[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,7 +42,6 @@ const SingleplayerScreen: React.FC = () => {
         const elapsed = (Date.now() - startTime) / 1000;
         setTimeElapsed(elapsed);
         
-        // Calculate WPM
         const minutes = elapsed / 60;
         const wordsTyped = currentWordIndex;
         setWpm(minutes > 0 ? Math.round(wordsTyped / minutes) : 0);
@@ -51,32 +50,27 @@ const SingleplayerScreen: React.FC = () => {
     }
   }, [startTime, isFinished, currentWordIndex]);
 
-  const generateWords = () => {
-    let generatedWords = [];
-    for (let i = 0; i < wordCount; i++) {
-      let word = SAMPLE_WORDS[Math.floor(Math.random() * SAMPLE_WORDS.length)];
-      
-      if (capitalization && Math.random() > 0.5) {
-        word = word.charAt(0).toUpperCase() + word.slice(1);
+  const generateWords = async () => {
+    try {
+      const res = await api.getWords({ count: wordCount, punctuation, numbers, caps: capitalization });
+      setWords(res.data.words);
+    } catch {
+      // Fallback to local generation if API unavailable
+      const fallback = ['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog', 'and', 'runs',
+        'through', 'forest', 'with', 'great', 'speed', 'while', 'avoiding', 'all', 'obstacles',
+        'that', 'come', 'its', 'way', 'during', 'this', 'amazing', 'adventure'];
+      const generated = [];
+      for (let i = 0; i < wordCount; i++) {
+        generated.push(fallback[Math.floor(Math.random() * fallback.length)]);
       }
-      
-      if (numbers && Math.random() > 0.7) {
-        word = word + Math.floor(Math.random() * 10);
-      }
-      
-      if (punctuation && i < wordCount - 1 && Math.random() > 0.7) {
-        const punctuationMarks = [',', '.', '!', '?'];
-        word = word + punctuationMarks[Math.floor(Math.random() * punctuationMarks.length)];
-      }
-      
-      generatedWords.push(word);
+      setWords(generated);
     }
-    setWords(generatedWords);
     resetGame();
   };
 
   const resetGame = () => {
     setCurrentWordIndex(0);
+    setTypedWords([]);
     setInput('');
     setStartTime(null);
     setTimeElapsed(0);
@@ -85,6 +79,8 @@ const SingleplayerScreen: React.FC = () => {
     setIsFinished(false);
     setWpm(0);
     setAccuracy(100);
+    setServerResult(null);
+    setKeystrokeTimestamps([]);
     inputRef.current?.focus();
   };
 
@@ -95,28 +91,52 @@ const SingleplayerScreen: React.FC = () => {
       setStartTime(Date.now());
     }
 
+    // Record keystroke timestamp
+    setKeystrokeTimestamps((prev) => [...prev, Date.now()]);
+
     if (value.endsWith(' ')) {
       const typedWord = value.trim();
       const currentWord = words[currentWordIndex];
       
+      // Track typed words for server submission
+      setTypedWords((prev) => [...prev, typedWord]);
+
       // Count correct characters
       const correctCount = typedWord.split('').filter((char, i) => char === currentWord[i]).length;
       setCorrectChars(prev => prev + correctCount);
       setTotalChars(prev => prev + currentWord.length);
       
-      // Calculate accuracy
       const newTotalChars = totalChars + currentWord.length;
       const newCorrectChars = correctChars + correctCount;
       setAccuracy(newTotalChars > 0 ? Math.round((newCorrectChars / newTotalChars) * 100) : 100);
       
       if (currentWordIndex === words.length - 1) {
+        const finalTypedWords = [...typedWords, typedWord];
         setIsFinished(true);
+        submitResult(finalTypedWords);
       } else {
         setCurrentWordIndex(prev => prev + 1);
       }
       setInput('');
     } else {
       setInput(value);
+    }
+  };
+
+  const submitResult = async (finalTypedWords: string[]) => {
+    if (!isAuthenticated || !startTime) return;
+
+    try {
+      const res = await api.submitSingleplayer({
+        wordSet: words,
+        typedWords: finalTypedWords,
+        startTime,
+        endTime: Date.now(),
+        keystrokeTimestamps,
+      });
+      setServerResult(res.data);
+    } catch (err) {
+      console.error('Failed to submit result:', err);
     }
   };
 
@@ -153,11 +173,11 @@ const SingleplayerScreen: React.FC = () => {
           <div className="text-white/70 text-sm">Time</div>
         </div>
         <div className="text-center">
-          <div className="text-4xl text-white">{wpm}</div>
+          <div className="text-4xl text-white">{serverResult ? serverResult.wpm : wpm}</div>
           <div className="text-white/70 text-sm">WPM</div>
         </div>
         <div className="text-center">
-          <div className="text-4xl text-white">{accuracy}%</div>
+          <div className="text-4xl text-white">{serverResult ? serverResult.accuracy + '%' : accuracy + '%'}</div>
           <div className="text-white/70 text-sm">Accuracy</div>
         </div>
       </div>
@@ -273,20 +293,30 @@ const SingleplayerScreen: React.FC = () => {
         <div className="space-y-4">
           <div className="flex justify-between">
             <span>WPM:</span>
-            <span className="text-2xl">{wpm}</span>
+            <span className="text-2xl">{serverResult?.wpm ?? wpm}</span>
           </div>
           <div className="flex justify-between">
             <span>Accuracy:</span>
-            <span className="text-2xl">{accuracy}%</span>
+            <span className="text-2xl">{serverResult?.accuracy ?? accuracy}%</span>
           </div>
           <div className="flex justify-between">
             <span>Time:</span>
-            <span className="text-2xl">{Math.floor(timeElapsed)}s</span>
+            <span className="text-2xl">{serverResult?.timeTaken ? Math.floor(serverResult.timeTaken) : Math.floor(timeElapsed)}s</span>
           </div>
           <div className="flex justify-between">
             <span>Words:</span>
             <span className="text-2xl">{words.length}</span>
           </div>
+          {serverResult && (
+            <div className="text-sm text-green-400 text-center mt-2">
+              ✓ Result saved to your profile
+            </div>
+          )}
+          {!isAuthenticated && (
+            <div className="text-sm text-yellow-400 text-center mt-2">
+              Log in to save your results
+            </div>
+          )}
           <TypeHuntButton
             onClick={() => {
               setIsFinished(false);

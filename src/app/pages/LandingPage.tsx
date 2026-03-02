@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Zap, Users, Skull, User, Settings } from 'lucide-react';
+import { Zap, Users, Skull, User, Settings, LogIn, LogOut } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { TypeHuntButton } from '../components/TypeHuntButton';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { colors } = useTheme();
+  const { user, isAuthenticated, logout } = useAuth();
   const [cursorVisible, setCursorVisible] = useState(true);
 
   useEffect(() => {
@@ -38,22 +40,45 @@ const LandingPage: React.FC = () => {
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="flex gap-4"
+          className="flex gap-4 items-center"
         >
-          <button
-            onClick={() => navigate('/profile')}
-            className="px-6 py-2 rounded-lg text-white hover:bg-white/10 transition-colors flex items-center gap-2"
-          >
-            <User size={20} />
-            Profile
-          </button>
-          <button
-            onClick={() => navigate('/settings')}
-            className="px-6 py-2 rounded-lg text-white hover:bg-white/10 transition-colors flex items-center gap-2"
-          >
-            <Settings size={20} />
-            Settings
-          </button>
+          {isAuthenticated ? (
+            <>
+              <span className="text-white/80 text-sm">
+                Hey, <strong>{user?.username}</strong>
+              </span>
+              <button
+                onClick={() => navigate('/profile')}
+                className="px-6 py-2 rounded-lg text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+              >
+                <User size={20} />
+                Profile
+              </button>
+              <button
+                onClick={() => navigate('/settings')}
+                className="px-6 py-2 rounded-lg text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+              >
+                <Settings size={20} />
+                Settings
+              </button>
+              <button
+                onClick={logout}
+                className="px-6 py-2 rounded-lg text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+              >
+                <LogOut size={20} />
+                Logout
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => navigate('/auth')}
+              className="px-6 py-2 rounded-lg text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+              style={{ border: `1px solid ${colors.accent}` }}
+            >
+              <LogIn size={20} />
+              Login / Sign Up
+            </button>
+          )}
         </motion.div>
       </header>
 
@@ -87,7 +112,13 @@ const LandingPage: React.FC = () => {
           </TypeHuntButton>
 
           <TypeHuntButton
-            onClick={() => navigate('/multiplayer')}
+            onClick={() => {
+              if (!isAuthenticated) {
+                navigate('/auth');
+                return;
+              }
+              navigate('/multiplayer');
+            }}
             variant="highlight"
             size="lg"
           >

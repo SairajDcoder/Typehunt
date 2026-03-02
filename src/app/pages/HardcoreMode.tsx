@@ -3,18 +3,16 @@ import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { ArrowLeft, RotateCcw, Skull } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { api } from '../services/api';
 import { TypeHuntButton } from '../components/TypeHuntButton';
-
-const SAMPLE_WORDS = [
-  'the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog', 'and', 'runs',
-  'through', 'forest', 'with', 'great', 'speed', 'while', 'avoiding', 'all', 'obstacles',
-  'that', 'come', 'its', 'way', 'during', 'this', 'amazing', 'adventure', 'in', 'nature'
-];
 
 const HardcoreMode: React.FC = () => {
   const navigate = useNavigate();
   const { colors } = useTheme();
+  const { isAuthenticated } = useAuth();
   const [words, setWords] = useState<string[]>([]);
+  const [typedWords, setTypedWords] = useState<string[]>([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [input, setInput] = useState('');
   const [startTime, setStartTime] = useState<number | null>(null);
@@ -22,6 +20,7 @@ const HardcoreMode: React.FC = () => {
   const [wpm, setWpm] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
   const [gameOver, setGameOver] = useState(false);
+  const [serverResult, setServerResult] = useState<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,23 +41,33 @@ const HardcoreMode: React.FC = () => {
     }
   }, [startTime, isFinished, gameOver, currentWordIndex]);
 
-  const generateWords = () => {
-    let generatedWords = [];
-    for (let i = 0; i < 50; i++) {
-      generatedWords.push(SAMPLE_WORDS[Math.floor(Math.random() * SAMPLE_WORDS.length)]);
+  const generateWords = async () => {
+    try {
+      const res = await api.getWords({ count: 50 });
+      setWords(res.data.words);
+    } catch {
+      const fallback = ['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog', 'and', 'runs',
+        'through', 'forest', 'with', 'great', 'speed', 'while', 'avoiding', 'all', 'obstacles',
+        'that', 'come', 'its', 'way', 'during', 'this', 'amazing', 'adventure', 'in', 'nature'];
+      const generated = [];
+      for (let i = 0; i < 50; i++) {
+        generated.push(fallback[Math.floor(Math.random() * fallback.length)]);
+      }
+      setWords(generated);
     }
-    setWords(generatedWords);
     resetGame();
   };
 
   const resetGame = () => {
     setCurrentWordIndex(0);
+    setTypedWords([]);
     setInput('');
     setStartTime(null);
     setTimeElapsed(0);
     setWpm(0);
     setIsFinished(false);
     setGameOver(false);
+    setServerResult(null);
     inputRef.current?.focus();
   };
 
@@ -69,11 +78,9 @@ const HardcoreMode: React.FC = () => {
       setStartTime(Date.now());
     }
 
-    // Check for mistakes on every keystroke
     const currentWord = words[currentWordIndex];
     const typedPart = value.trim();
     
-    // If what they've typed so far doesn't match the beginning of the current word - GAME OVER
     if (!currentWord.startsWith(typedPart) && typedPart.length > 0) {
       setGameOver(true);
       return;
@@ -83,14 +90,17 @@ const HardcoreMode: React.FC = () => {
       const typedWord = value.trim();
       const currentWord = words[currentWordIndex];
       
-      // Must be exact match
       if (typedWord !== currentWord) {
         setGameOver(true);
         return;
       }
+
+      const newTypedWords = [...typedWords, typedWord];
+      setTypedWords(newTypedWords);
       
       if (currentWordIndex === words.length - 1) {
         setIsFinished(true);
+        submitResult(newTypedWords);
       } else {
         setCurrentWordIndex(prev => prev + 1);
       }
@@ -100,9 +110,22 @@ const HardcoreMode: React.FC = () => {
     }
   };
 
-  const progress = (currentWordIndex / words.length) * 100;
+  const submitResult = async (finalTypedWords: string[]) => {
+    if (!isAuthenticated || !startTime) return;
+    try {
+      const res = await api.submitHardcore({
+        wordSet: words,
+        typedWords: finalTypedWords,
+        startTime,
+        endTime: Date.now(),
+      });
+      setServerResult(res.data);
+    } catch (err) {
+      console.error('Failed to submit hardcore result:', err);
+    }
+  };
 
-  // Darker shade of primary dark for hardcore mode
+  const progress = (currentWordIndex / words.length) * 100;
   const hardcoreDark = colors.primaryDark === '#355872' ? '#1a2c39' : '#002830';
 
   return (
@@ -112,7 +135,6 @@ const HardcoreMode: React.FC = () => {
         background: `linear-gradient(135deg, ${hardcoreDark} 0%, ${colors.primaryDark} 100%)`,
       }}
     >
-      {/* Red danger overlay */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -152,7 +174,7 @@ const HardcoreMode: React.FC = () => {
           <p className="text-2xl text-red-400">One mistake = Game Over</p>
         </motion.div>
 
-        {/* Stats Bar */}
+        {/* Stats */}
         <div className="flex justify-center gap-8 mb-8">
           <div className="text-center">
             <div className="text-4xl text-white">{Math.floor(timeElapsed)}s</div>
@@ -224,7 +246,7 @@ const HardcoreMode: React.FC = () => {
           </div>
         )}
 
-        {/* Game Over Screen */}
+        {/* Game Over */}
         {gameOver && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -233,10 +255,7 @@ const HardcoreMode: React.FC = () => {
           >
             <div
               className="p-12 rounded-3xl border-4"
-              style={{ 
-                backgroundColor: colors.primaryDark,
-                borderColor: '#dc2626',
-              }}
+              style={{ backgroundColor: colors.primaryDark, borderColor: '#dc2626' }}
             >
               <Skull size={100} color="#dc2626" className="mx-auto mb-6" />
               <h2 className="text-6xl text-red-500 mb-4">GAME OVER</h2>
@@ -255,19 +274,14 @@ const HardcoreMode: React.FC = () => {
                   <span>{Math.floor(timeElapsed)}s</span>
                 </div>
               </div>
-              <TypeHuntButton
-                onClick={generateWords}
-                variant="primary"
-                size="lg"
-                className="w-full"
-              >
+              <TypeHuntButton onClick={generateWords} variant="primary" size="lg" className="w-full">
                 Try Again
               </TypeHuntButton>
             </div>
           </motion.div>
         )}
 
-        {/* Success Screen */}
+        {/* Success */}
         {isFinished && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -276,10 +290,7 @@ const HardcoreMode: React.FC = () => {
           >
             <div
               className="p-12 rounded-3xl border-4"
-              style={{ 
-                backgroundColor: colors.primaryDark,
-                borderColor: colors.accent,
-              }}
+              style={{ backgroundColor: colors.primaryDark, borderColor: colors.accent }}
             >
               <motion.div
                 initial={{ scale: 0 }}
@@ -293,19 +304,17 @@ const HardcoreMode: React.FC = () => {
               <div className="space-y-3 mb-8">
                 <div className="flex justify-between text-xl text-white">
                   <span>WPM:</span>
-                  <span>{wpm}</span>
+                  <span>{serverResult?.wpm ?? wpm}</span>
                 </div>
                 <div className="flex justify-between text-xl text-white">
                   <span>Time:</span>
-                  <span>{Math.floor(timeElapsed)}s</span>
+                  <span>{serverResult?.timeTaken ? Math.floor(serverResult.timeTaken) : Math.floor(timeElapsed)}s</span>
                 </div>
               </div>
-              <TypeHuntButton
-                onClick={generateWords}
-                variant="accent"
-                size="lg"
-                className="w-full"
-              >
+              {serverResult && (
+                <div className="text-sm text-green-400 mb-4">✓ Result saved</div>
+              )}
+              <TypeHuntButton onClick={generateWords} variant="accent" size="lg" className="w-full">
                 Play Again
               </TypeHuntButton>
             </div>

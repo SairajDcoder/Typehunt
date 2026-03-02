@@ -7,11 +7,16 @@ import MultiplayerRace from "./pages/MultiplayerRace";
 import HardcoreMode from "./pages/HardcoreMode";
 import ProfileDashboard from "./pages/ProfileDashboard";
 import SettingsPage from "./pages/SettingsPage";
+import AuthPage from "./pages/AuthPage";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     Component: LandingPage,
+  },
+  {
+    path: "/auth",
+    Component: AuthPage,
   },
   {
     path: "/modes",
