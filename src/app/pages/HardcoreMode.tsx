@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { ArrowLeft, RotateCcw, Skull } from 'lucide-react';
@@ -6,22 +6,21 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { TypeHuntButton } from '../components/TypeHuntButton';
+import { TypingArea } from '../components/TypingArea';
 
 const HardcoreMode: React.FC = () => {
   const navigate = useNavigate();
   const { colors } = useTheme();
   const { isAuthenticated } = useAuth();
   const [words, setWords] = useState<string[]>([]);
-  const [typedWords, setTypedWords] = useState<string[]>([]);
-  const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const [input, setInput] = useState('');
   const [startTime, setStartTime] = useState<number | null>(null);
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [wpm, setWpm] = useState(0);
+  const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [serverResult, setServerResult] = useState<any>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [typingKey, setTypingKey] = useState(0);
 
   useEffect(() => {
     generateWords();
@@ -32,10 +31,8 @@ const HardcoreMode: React.FC = () => {
       const interval = setInterval(() => {
         const elapsed = (Date.now() - startTime) / 1000;
         setTimeElapsed(elapsed);
-        
         const minutes = elapsed / 60;
-        const wordsTyped = currentWordIndex;
-        setWpm(minutes > 0 ? Math.round(wordsTyped / minutes) : 0);
+        setWpm(minutes > 0 ? Math.round(currentWordIndex / minutes) : 0);
       }, 100);
       return () => clearInterval(interval);
     }
@@ -50,78 +47,54 @@ const HardcoreMode: React.FC = () => {
         'through', 'forest', 'with', 'great', 'speed', 'while', 'avoiding', 'all', 'obstacles',
         'that', 'come', 'its', 'way', 'during', 'this', 'amazing', 'adventure', 'in', 'nature'];
       const generated = [];
-      for (let i = 0; i < 50; i++) {
-        generated.push(fallback[Math.floor(Math.random() * fallback.length)]);
-      }
+      for (let i = 0; i < 50; i++) generated.push(fallback[Math.floor(Math.random() * fallback.length)]);
       setWords(generated);
     }
     resetGame();
   };
 
   const resetGame = () => {
-    setCurrentWordIndex(0);
-    setTypedWords([]);
-    setInput('');
     setStartTime(null);
     setTimeElapsed(0);
     setWpm(0);
+    setCurrentWordIndex(0);
     setIsFinished(false);
     setGameOver(false);
     setServerResult(null);
-    inputRef.current?.focus();
+    setTypingKey((prev) => prev + 1);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    
-    if (!startTime) {
-      setStartTime(Date.now());
-    }
-
-    const currentWord = words[currentWordIndex];
-    const typedPart = value.trim();
-    
-    if (!currentWord.startsWith(typedPart) && typedPart.length > 0) {
-      setGameOver(true);
-      return;
-    }
-
-    if (value.endsWith(' ')) {
-      const typedWord = value.trim();
-      const currentWord = words[currentWordIndex];
-      
-      if (typedWord !== currentWord) {
-        setGameOver(true);
-        return;
-      }
-
-      const newTypedWords = [...typedWords, typedWord];
-      setTypedWords(newTypedWords);
-      
-      if (currentWordIndex === words.length - 1) {
-        setIsFinished(true);
-        submitResult(newTypedWords);
-      } else {
-        setCurrentWordIndex(prev => prev + 1);
-      }
-      setInput('');
-    } else {
-      setInput(value);
-    }
+  const handleStart = () => {
+    setStartTime(Date.now());
   };
 
-  const submitResult = async (finalTypedWords: string[]) => {
-    if (!isAuthenticated || !startTime) return;
-    try {
-      const res = await api.submitHardcore({
-        wordSet: words,
-        typedWords: finalTypedWords,
-        startTime,
-        endTime: Date.now(),
-      });
-      setServerResult(res.data);
-    } catch (err) {
-      console.error('Failed to submit hardcore result:', err);
+  const handleProgress = (data: any) => {
+    setCurrentWordIndex(data.currentWordIndex);
+  };
+
+  const handleMistake = () => {
+    setGameOver(true);
+  };
+
+  const handleFinish = async (data: any) => {
+    setIsFinished(true);
+    const endTime = Date.now();
+    const elapsed = startTime ? (endTime - startTime) / 1000 : 0;
+    const minutes = elapsed / 60;
+    setWpm(minutes > 0 ? Math.round(data.correctWords / minutes) : 0);
+
+    if (isAuthenticated && startTime) {
+      try {
+        const res = await api.submitHardcore({
+          wordSet: words,
+          typedWords: data.typedWords,
+          startTime,
+          endTime,
+        });
+        setServerResult(res.data);
+      } catch (err) {
+        console.error('Failed to submit hardcore result:', err);
+      }
     }
   };
 
@@ -131,41 +104,22 @@ const HardcoreMode: React.FC = () => {
   return (
     <div
       className="min-h-screen p-8 relative overflow-hidden"
-      style={{
-        background: `linear-gradient(135deg, ${hardcoreDark} 0%, ${colors.primaryDark} 100%)`,
-      }}
+      style={{ background: `linear-gradient(135deg, ${hardcoreDark} 0%, ${colors.primaryDark} 100%)` }}
     >
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(circle at center, rgba(220, 38, 38, 0.1) 0%, transparent 70%)',
-        }}
-      />
+      <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at center, rgba(220, 38, 38, 0.1) 0%, transparent 70%)' }} />
 
       <div className="relative z-10">
         <div className="flex justify-between items-center mb-8">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-white hover:opacity-80 transition-opacity"
-          >
-            <ArrowLeft size={20} />
-            Back
+          <button onClick={() => navigate('/')} className="flex items-center gap-2 text-white hover:opacity-80 transition-opacity">
+            <ArrowLeft size={20} /> Back
           </button>
-          <button
-            onClick={generateWords}
-            className="flex items-center gap-2 text-white hover:opacity-80 transition-opacity"
-          >
-            <RotateCcw size={20} />
-            Restart
+          <button onClick={generateWords} className="flex items-center gap-2 text-white hover:opacity-80 transition-opacity">
+            <RotateCcw size={20} /> Restart
           </button>
         </div>
 
         {/* Hardcore Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8"
-        >
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
             <Skull size={48} color="#dc2626" />
             <h1 className="text-6xl text-white">HARDCORE MODE</h1>
@@ -193,54 +147,26 @@ const HardcoreMode: React.FC = () => {
         {/* Progress Bar */}
         <div className="max-w-4xl mx-auto mb-8">
           <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full"
-              style={{ backgroundColor: '#dc2626' }}
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-            />
+            <motion.div className="h-full" style={{ backgroundColor: '#dc2626' }} initial={{ width: 0 }} animate={{ width: `${progress}%` }} />
           </div>
         </div>
 
-        {/* Typing Area */}
+        {/* MonkeyType Typing Area */}
         {!gameOver && !isFinished && (
           <div className="max-w-4xl mx-auto">
             <div
               className="p-8 rounded-2xl shadow-2xl border-2"
-              style={{ 
-                backgroundColor: `${colors.primaryDark}80`,
-                borderColor: '#dc2626',
-              }}
+              style={{ backgroundColor: `${colors.primaryDark}80`, borderColor: '#dc2626' }}
             >
-              <div className="mb-6 text-2xl text-white/80 leading-relaxed font-mono flex flex-wrap gap-2">
-                {words.map((word, index) => (
-                  <span
-                    key={index}
-                    className={
-                      index === currentWordIndex
-                        ? 'text-white underline'
-                        : index < currentWordIndex
-                        ? 'text-green-400'
-                        : 'text-white/60'
-                    }
-                  >
-                    {word}
-                  </span>
-                ))}
-              </div>
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={handleInputChange}
-                className="w-full p-4 text-xl rounded-lg font-mono outline-none"
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white',
-                  border: '2px solid #dc2626',
-                }}
-                placeholder="Type here... No mistakes allowed!"
-                autoFocus
+              <TypingArea
+                key={typingKey}
+                words={words}
+                hardcoreMode
+                onStart={handleStart}
+                onProgress={handleProgress}
+                onFinish={handleFinish}
+                onMistake={handleMistake}
+                accentColor="#dc2626"
               />
             </div>
           </div>
@@ -248,75 +174,36 @@ const HardcoreMode: React.FC = () => {
 
         {/* Game Over */}
         {gameOver && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="max-w-2xl mx-auto text-center"
-          >
-            <div
-              className="p-12 rounded-3xl border-4"
-              style={{ backgroundColor: colors.primaryDark, borderColor: '#dc2626' }}
-            >
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-2xl mx-auto text-center">
+            <div className="p-12 rounded-3xl border-4" style={{ backgroundColor: colors.primaryDark, borderColor: '#dc2626' }}>
               <Skull size={100} color="#dc2626" className="mx-auto mb-6" />
               <h2 className="text-6xl text-red-500 mb-4">GAME OVER</h2>
               <p className="text-2xl text-white/80 mb-6">You made a mistake!</p>
               <div className="space-y-3 mb-8">
-                <div className="flex justify-between text-xl text-white">
-                  <span>Words Completed:</span>
-                  <span>{currentWordIndex}</span>
-                </div>
-                <div className="flex justify-between text-xl text-white">
-                  <span>WPM:</span>
-                  <span>{wpm}</span>
-                </div>
-                <div className="flex justify-between text-xl text-white">
-                  <span>Time:</span>
-                  <span>{Math.floor(timeElapsed)}s</span>
-                </div>
+                <div className="flex justify-between text-xl text-white"><span>Words Completed:</span><span>{currentWordIndex}</span></div>
+                <div className="flex justify-between text-xl text-white"><span>WPM:</span><span>{wpm}</span></div>
+                <div className="flex justify-between text-xl text-white"><span>Time:</span><span>{Math.floor(timeElapsed)}s</span></div>
               </div>
-              <TypeHuntButton onClick={generateWords} variant="primary" size="lg" className="w-full">
-                Try Again
-              </TypeHuntButton>
+              <TypeHuntButton onClick={generateWords} variant="primary" size="lg" className="w-full">Try Again</TypeHuntButton>
             </div>
           </motion.div>
         )}
 
         {/* Success */}
         {isFinished && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="max-w-2xl mx-auto text-center"
-          >
-            <div
-              className="p-12 rounded-3xl border-4"
-              style={{ backgroundColor: colors.primaryDark, borderColor: colors.accent }}
-            >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1, rotate: 360 }}
-                transition={{ type: 'spring', duration: 0.8 }}
-              >
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-2xl mx-auto text-center">
+            <div className="p-12 rounded-3xl border-4" style={{ backgroundColor: colors.primaryDark, borderColor: colors.accent }}>
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: 'spring', duration: 0.8 }}>
                 <div className="text-8xl mb-6">🏆</div>
               </motion.div>
               <h2 className="text-6xl text-green-400 mb-4">FLAWLESS!</h2>
               <p className="text-2xl text-white/80 mb-6">Perfect run with no mistakes!</p>
               <div className="space-y-3 mb-8">
-                <div className="flex justify-between text-xl text-white">
-                  <span>WPM:</span>
-                  <span>{serverResult?.wpm ?? wpm}</span>
-                </div>
-                <div className="flex justify-between text-xl text-white">
-                  <span>Time:</span>
-                  <span>{serverResult?.timeTaken ? Math.floor(serverResult.timeTaken) : Math.floor(timeElapsed)}s</span>
-                </div>
+                <div className="flex justify-between text-xl text-white"><span>WPM:</span><span>{serverResult?.wpm ?? wpm}</span></div>
+                <div className="flex justify-between text-xl text-white"><span>Time:</span><span>{serverResult?.timeTaken ? Math.floor(serverResult.timeTaken) : Math.floor(timeElapsed)}s</span></div>
               </div>
-              {serverResult && (
-                <div className="text-sm text-green-400 mb-4">✓ Result saved</div>
-              )}
-              <TypeHuntButton onClick={generateWords} variant="accent" size="lg" className="w-full">
-                Play Again
-              </TypeHuntButton>
+              {serverResult && <div className="text-sm text-green-400 mb-4">✓ Result saved</div>}
+              <TypeHuntButton onClick={generateWords} variant="accent" size="lg" className="w-full">Play Again</TypeHuntButton>
             </div>
           </motion.div>
         )}
