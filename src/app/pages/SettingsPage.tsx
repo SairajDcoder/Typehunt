@@ -118,22 +118,30 @@ const SettingsPage: React.FC = () => {
               <h2 className="text-2xl text-white">Keyboard Sound</h2>
             </div>
             <div className="space-y-3">
-              {(['mechanical', 'typewriter', 'silent'] as const).map((sound) => (
+              {([
+                { id: 'pop-click', label: 'Pop Click', desc: 'Short snappy pop' },
+                { id: 'retro-beep', label: 'Retro Beep', desc: 'Dual-tone retro sound' },
+                { id: 'soft-tap', label: 'Soft Tap', desc: 'Gentle noise tap' },
+                { id: 'silent', label: 'Silent', desc: 'No sound' },
+              ] as const).map((sound) => (
                 <div
-                  key={sound}
-                  onClick={() => setKeyboardSound(sound)}
+                  key={sound.id}
+                  onClick={() => setKeyboardSound(sound.id)}
                   className={`p-4 rounded-lg cursor-pointer transition-all ${
-                    keyboardSound === sound ? 'ring-2' : 'hover:bg-white/5'
+                    keyboardSound === sound.id ? 'ring-2' : 'hover:bg-white/5'
                   }`}
                   style={{
-                    backgroundColor: keyboardSound === sound ? `${colors.accent}30` : 'rgba(255, 255, 255, 0.1)',
+                    backgroundColor: keyboardSound === sound.id ? `${colors.accent}30` : 'rgba(255, 255, 255, 0.1)',
                     // @ts-ignore
                     '--tw-ring-color': colors.accent,
                   }}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-white capitalize">{sound}</span>
-                    {keyboardSound === sound && (
+                    <div>
+                      <span className="text-white block">{sound.label}</span>
+                      <span className="text-white/50 text-sm">{sound.desc}</span>
+                    </div>
+                    {keyboardSound === sound.id && (
                       <div className="text-xl" style={{ color: colors.accent }}>✓</div>
                     )}
                   </div>

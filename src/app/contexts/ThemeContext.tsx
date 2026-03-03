@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type ThemeType = 'blue-frost' | 'teal-ocean' | 'olive-garden' | 'midnight-cyan' | 'ocean-blue' | 'soft-periwinkle' | 'dark-forest' | 'neon-noir' | 'berry-rose' | 'mint-teal' | 'steel-gray' | 'warm-sand' | 'charcoal-taupe' | 'sage-garden' | 'neon-purple' | 'deep-indigo';
+export type ThemeType = 'blue-frost' | 'teal-ocean' | 'olive-garden' | 'midnight-cyan' | 'ocean-blue' | 'soft-periwinkle' | 'dark-forest' | 'neon-noir' | 'berry-rose' | 'mint-teal' | 'steel-gray' | 'warm-sand' | 'charcoal-taupe' | 'sage-garden' | 'neon-purple' | 'deep-indigo' | 'crimson-dark' | 'coral-blush' | 'lavender-dream' | 'sky-breeze' | 'sunset-glow';
 
 export interface ThemeColors {
   primaryDark: string;
@@ -129,6 +129,41 @@ const THEMES: Record<ThemeType, ThemeColors> = {
     highlightAccent: '#9290C3',
     backgroundNeutral: '#D5D4E8',
   },
+  'crimson-dark': {
+    primaryDark: '#171717',
+    primaryMid: '#444444',
+    accent: '#DA0037',
+    highlightAccent: '#EDEDED',
+    backgroundNeutral: '#F5F5F5',
+  },
+  'coral-blush': {
+    primaryDark: '#446582',
+    primaryMid: '#B0826C',
+    accent: '#F38181',
+    highlightAccent: '#FCE4E4',
+    backgroundNeutral: '#FFF0F0',
+  },
+  'lavender-dream': {
+    primaryDark: '#645CAA',
+    primaryMid: '#B084CF',
+    accent: '#D4B2E0',
+    highlightAccent: '#EAD5F3',
+    backgroundNeutral: '#F5EEFB',
+  },
+  'sky-breeze': {
+    primaryDark: '#2C698D',
+    primaryMid: '#4F9FC7',
+    accent: '#7EC8E3',
+    highlightAccent: '#BAE5F5',
+    backgroundNeutral: '#E3F5FB',
+  },
+  'sunset-glow': {
+    primaryDark: '#155263',
+    primaryMid: '#FF6F3C',
+    accent: '#FF9A3C',
+    highlightAccent: '#FFC93C',
+    backgroundNeutral: '#FFF5E0',
+  },
 };
 
 export const THEME_LIST: { id: ThemeType; name: string; colors: ThemeColors }[] = [
@@ -148,6 +183,11 @@ export const THEME_LIST: { id: ThemeType; name: string; colors: ThemeColors }[] 
   { id: 'sage-garden', name: 'Sage Garden', colors: THEMES['sage-garden'] },
   { id: 'neon-purple', name: 'Neon Purple', colors: THEMES['neon-purple'] },
   { id: 'deep-indigo', name: 'Deep Indigo', colors: THEMES['deep-indigo'] },
+  { id: 'crimson-dark', name: 'Crimson Dark', colors: THEMES['crimson-dark'] },
+  { id: 'coral-blush', name: 'Coral Blush', colors: THEMES['coral-blush'] },
+  { id: 'lavender-dream', name: 'Lavender Dream', colors: THEMES['lavender-dream'] },
+  { id: 'sky-breeze', name: 'Sky Breeze', colors: THEMES['sky-breeze'] },
+  { id: 'sunset-glow', name: 'Sunset Glow', colors: THEMES['sunset-glow'] },
 ];
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type KeyboardSoundType = 'mechanical' | 'typewriter' | 'silent';
+export type KeyboardSoundType = 'pop-click' | 'retro-beep' | 'soft-tap' | 'silent';
 export type WordCategoryType = 'common' | 'advanced' | 'programming' | 'quotes';
 export type LanguageType = 'english';
 
@@ -31,7 +31,7 @@ function saveSetting(key: string, value: any) {
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [soundEnabled, _setSoundEnabled] = useState(() => loadSetting('soundEnabled', true));
-  const [keyboardSound, _setKeyboardSound] = useState<KeyboardSoundType>(() => loadSetting('keyboardSound', 'mechanical'));
+  const [keyboardSound, _setKeyboardSound] = useState<KeyboardSoundType>(() => loadSetting('keyboardSound', 'pop-click'));
   const [wordCategory, _setWordCategory] = useState<WordCategoryType>(() => loadSetting('wordCategory', 'common'));
   const [language, _setLanguage] = useState<LanguageType>(() => loadSetting('language', 'english'));
 

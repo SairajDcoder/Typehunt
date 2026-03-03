@@ -9,7 +9,8 @@ function getAudioContext(): AudioContext {
   return audioCtx;
 }
 
-function playMechanical() {
+// "Pop Click" — short, snappy pop sound
+function playPopClick() {
   const ctx = getAudioContext();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -27,7 +28,8 @@ function playMechanical() {
   osc.stop(ctx.currentTime + 0.05);
 }
 
-function playTypewriter() {
+// "Retro Beep" — deeper, dual-tone retro sound
+function playRetroBeep() {
   const ctx = getAudioContext();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -57,14 +59,71 @@ function playTypewriter() {
   click.stop(ctx.currentTime + 0.02);
 }
 
+// "Soft Tap" — gentle, soft tap with white noise
+function playSoftTap() {
+  const ctx = getAudioContext();
+
+  // Create noise buffer for a softer, more natural tap
+  const bufferSize = ctx.sampleRate * 0.03; // 30ms
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    // Shaped noise that decays
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.2));
+  }
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.04, ctx.currentTime);
+
+  // Bandpass filter to shape the noise
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(2000 + Math.random() * 500, ctx.currentTime);
+  filter.Q.setValueAtTime(1.5, ctx.currentTime);
+
+  noise.connect(filter);
+  filter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(ctx.currentTime);
+}
+
+/**
+ * Play a keystroke sound.
+ * 
+ * Sound types:
+ * - "pop-click": Short snappy pop (synthesized)
+ * - "retro-beep": Deeper retro dual-tone beep (synthesized)
+ * - "soft-tap": Gentle tap with noise (synthesized)
+ * - "silent": No sound
+ * 
+ * To add REAL audio files (e.g. actual mechanical keyboard sounds):
+ * 1. Place .mp3/.wav files in /public/sounds/ (e.g. /public/sounds/mechanical.mp3)
+ * 2. Add a new case below that loads and plays the audio file:
+ * 
+ *    const audio = new Audio('/sounds/mechanical.mp3');
+ *    audio.volume = 0.5;
+ *    audio.play();
+ * 
+ * 3. Add the new type to KeyboardSoundType in SettingsContext.tsx
+ * 4. Add it to the sound options list in SettingsPage.tsx
+ */
 export function playKeystrokeSound(type: KeyboardSoundType, enabled: boolean) {
   if (!enabled || type === 'silent') return;
 
   try {
-    if (type === 'mechanical') {
-      playMechanical();
-    } else if (type === 'typewriter') {
-      playTypewriter();
+    switch (type) {
+      case 'pop-click':
+        playPopClick();
+        break;
+      case 'retro-beep':
+        playRetroBeep();
+        break;
+      case 'soft-tap':
+        playSoftTap();
+        break;
     }
   } catch {
     // Audio context may not be available
