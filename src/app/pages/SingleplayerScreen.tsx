@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { api } from '../services/api';
 import { TypeHuntButton } from '../components/TypeHuntButton';
 import { TypeHuntToggle } from '../components/TypeHuntToggle';
@@ -14,6 +15,7 @@ const SingleplayerScreen: React.FC = () => {
   const navigate = useNavigate();
   const { colors } = useTheme();
   const { isAuthenticated } = useAuth();
+  const { wordCategory } = useSettings();
   const [wordCount, setWordCount] = useState(25);
   const [punctuation, setPunctuation] = useState(false);
   const [numbers, setNumbers] = useState(false);
@@ -46,7 +48,7 @@ const SingleplayerScreen: React.FC = () => {
 
   const generateWords = async () => {
     try {
-      const res = await api.getWords({ count: wordCount, punctuation, numbers, caps: capitalization });
+      const res = await api.getWords({ count: wordCount, punctuation, numbers, caps: capitalization, category: wordCategory });
       setWords(res.data.words);
     } catch {
       const fallback = ['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog', 'and', 'runs',

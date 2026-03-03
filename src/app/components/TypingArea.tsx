@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSettings } from '../contexts/SettingsContext';
+import { playKeystrokeSound } from '../services/sounds';
 
 interface TypingAreaProps {
   words: string[];
@@ -39,6 +41,7 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
   hardcoreMode = false,
   accentColor = '#9CD5FF',
 }) => {
+  const { soundEnabled, keyboardSound } = useSettings();
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentInput, setCurrentInput] = useState('');
   const [wordHistory, setWordHistory] = useState<string[]>([]);
@@ -120,6 +123,9 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
     }
 
     setKeystrokeTimestamps((prev) => [...prev, Date.now()]);
+
+    // Play keystroke sound
+    playKeystrokeSound(keyboardSound, soundEnabled);
 
     if (e.key === ' ') {
       e.preventDefault();

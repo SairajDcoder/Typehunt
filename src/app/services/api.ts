@@ -75,12 +75,13 @@ class ApiClient {
   }
 
   // Game
-  async getWords(options: { count?: number; punctuation?: boolean; numbers?: boolean; caps?: boolean } = {}) {
+  async getWords(options: { count?: number; punctuation?: boolean; numbers?: boolean; caps?: boolean; category?: string } = {}) {
     const params = new URLSearchParams();
     if (options.count) params.set('count', String(options.count));
     if (options.punctuation) params.set('punctuation', 'true');
     if (options.numbers) params.set('numbers', 'true');
     if (options.caps) params.set('caps', 'true');
+    if (options.category) params.set('category', options.category);
     return this.request<any>(`/game/words?${params.toString()}`);
   }
 

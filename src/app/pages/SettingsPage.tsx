@@ -1,18 +1,21 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { ArrowLeft, Palette, Volume2, Keyboard, BookOpen, Globe } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme, THEME_LIST } from '../contexts/ThemeContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { TypeHuntCard } from '../components/TypeHuntCard';
 import { TypeHuntToggle } from '../components/TypeHuntToggle';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const { theme, setTheme, colors } = useTheme();
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [keyboardSound, setKeyboardSound] = useState('mechanical');
-  const [wordCategory, setWordCategory] = useState('common');
-  const [language, setLanguage] = useState('english');
+  const {
+    soundEnabled, setSoundEnabled,
+    keyboardSound, setKeyboardSound,
+    wordCategory, setWordCategory,
+    language, setLanguage,
+  } = useSettings();
 
   return (
     <div
@@ -49,58 +52,36 @@ const SettingsPage: React.FC = () => {
               <Palette size={28} color="white" />
               <h2 className="text-2xl text-white">Theme</h2>
             </div>
-            <div className="space-y-4">
-              <div
-                onClick={() => setTheme('blue-frost')}
-                className={`p-6 rounded-xl cursor-pointer transition-all ${
-                  theme === 'blue-frost' ? 'ring-4' : 'hover:scale-105'
-                }`}
-                style={{
-                  backgroundColor: '#355872',
-                  ringColor: '#9CD5FF',
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl text-white mb-2">Blue Frost</h3>
-                    <div className="flex gap-2">
-                      <div className="w-8 h-8 rounded-full" style={{ backgroundColor: '#355872' }} />
-                      <div className="w-8 h-8 rounded-full" style={{ backgroundColor: '#7AAACE' }} />
-                      <div className="w-8 h-8 rounded-full" style={{ backgroundColor: '#9CD5FF' }} />
-                      <div className="w-8 h-8 rounded-full" style={{ backgroundColor: '#F7F8F0' }} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {THEME_LIST.map((t) => (
+                <div
+                  key={t.id}
+                  onClick={() => setTheme(t.id)}
+                  className={`p-5 rounded-xl cursor-pointer transition-all ${
+                    theme === t.id ? 'ring-4 scale-[1.02]' : 'hover:scale-105'
+                  }`}
+                  style={{
+                    backgroundColor: t.colors.primaryDark,
+                    // @ts-ignore
+                    '--tw-ring-color': t.colors.accent,
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg text-white mb-2">{t.name}</h3>
+                      <div className="flex gap-2">
+                        <div className="w-7 h-7 rounded-full border border-white/20" style={{ backgroundColor: t.colors.primaryDark }} />
+                        <div className="w-7 h-7 rounded-full border border-white/20" style={{ backgroundColor: t.colors.primaryMid }} />
+                        <div className="w-7 h-7 rounded-full border border-white/20" style={{ backgroundColor: t.colors.accent }} />
+                        <div className="w-7 h-7 rounded-full border border-white/20" style={{ backgroundColor: t.colors.highlightAccent }} />
+                      </div>
                     </div>
+                    {theme === t.id && (
+                      <div className="text-2xl text-white">✓</div>
+                    )}
                   </div>
-                  {theme === 'blue-frost' && (
-                    <div className="text-3xl">✓</div>
-                  )}
                 </div>
-              </div>
-
-              <div
-                onClick={() => setTheme('teal-ocean')}
-                className={`p-6 rounded-xl cursor-pointer transition-all ${
-                  theme === 'teal-ocean' ? 'ring-4' : 'hover:scale-105'
-                }`}
-                style={{
-                  backgroundColor: '#005461',
-                  ringColor: '#3BC1A8',
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl text-white mb-2">Teal Ocean</h3>
-                    <div className="flex gap-2">
-                      <div className="w-8 h-8 rounded-full" style={{ backgroundColor: '#005461' }} />
-                      <div className="w-8 h-8 rounded-full" style={{ backgroundColor: '#0C7779' }} />
-                      <div className="w-8 h-8 rounded-full" style={{ backgroundColor: '#249E94' }} />
-                      <div className="w-8 h-8 rounded-full" style={{ backgroundColor: '#3BC1A8' }} />
-                    </div>
-                  </div>
-                  {theme === 'teal-ocean' && (
-                    <div className="text-3xl">✓</div>
-                  )}
-                </div>
-              </div>
+              ))}
             </div>
           </TypeHuntCard>
         </motion.div>
@@ -137,7 +118,7 @@ const SettingsPage: React.FC = () => {
               <h2 className="text-2xl text-white">Keyboard Sound</h2>
             </div>
             <div className="space-y-3">
-              {['mechanical', 'typewriter', 'silent'].map((sound) => (
+              {(['mechanical', 'typewriter', 'silent'] as const).map((sound) => (
                 <div
                   key={sound}
                   onClick={() => setKeyboardSound(sound)}
@@ -145,14 +126,15 @@ const SettingsPage: React.FC = () => {
                     keyboardSound === sound ? 'ring-2' : 'hover:bg-white/5'
                   }`}
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    ringColor: colors.accent,
+                    backgroundColor: keyboardSound === sound ? `${colors.accent}30` : 'rgba(255, 255, 255, 0.1)',
+                    // @ts-ignore
+                    '--tw-ring-color': colors.accent,
                   }}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-white capitalize">{sound}</span>
                     {keyboardSound === sound && (
-                      <div className="text-xl">✓</div>
+                      <div className="text-xl" style={{ color: colors.accent }}>✓</div>
                     )}
                   </div>
                 </div>
@@ -173,22 +155,31 @@ const SettingsPage: React.FC = () => {
               <h2 className="text-2xl text-white">Word Category</h2>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              {['common', 'advanced', 'programming', 'quotes'].map((category) => (
+              {([
+                { id: 'common', label: 'Common', desc: 'Everyday words' },
+                { id: 'advanced', label: 'Advanced', desc: 'SAT/GRE vocabulary' },
+                { id: 'programming', label: 'Programming', desc: 'Code keywords' },
+                { id: 'quotes', label: 'Quotes', desc: 'Famous quotes' },
+              ] as const).map((cat) => (
                 <div
-                  key={category}
-                  onClick={() => setWordCategory(category)}
+                  key={cat.id}
+                  onClick={() => setWordCategory(cat.id)}
                   className={`p-4 rounded-lg cursor-pointer transition-all ${
-                    wordCategory === category ? 'ring-2' : 'hover:bg-white/5'
+                    wordCategory === cat.id ? 'ring-2' : 'hover:bg-white/5'
                   }`}
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    ringColor: colors.accent,
+                    backgroundColor: wordCategory === cat.id ? `${colors.accent}30` : 'rgba(255, 255, 255, 0.1)',
+                    // @ts-ignore
+                    '--tw-ring-color': colors.accent,
                   }}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-white capitalize">{category}</span>
-                    {wordCategory === category && (
-                      <div className="text-xl">✓</div>
+                    <div>
+                      <span className="text-white block">{cat.label}</span>
+                      <span className="text-white/50 text-sm">{cat.desc}</span>
+                    </div>
+                    {wordCategory === cat.id && (
+                      <div className="text-xl" style={{ color: colors.accent }}>✓</div>
                     )}
                   </div>
                 </div>
@@ -209,26 +200,35 @@ const SettingsPage: React.FC = () => {
               <h2 className="text-2xl text-white">Language</h2>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              {['english', 'spanish', 'french', 'german', 'japanese', 'chinese'].map((lang) => (
+              {([
+                { id: 'english', label: 'English', flag: '🇺🇸' },
+              ] as const).map((lang) => (
                 <div
-                  key={lang}
-                  onClick={() => setLanguage(lang)}
+                  key={lang.id}
+                  onClick={() => setLanguage(lang.id)}
                   className={`p-4 rounded-lg cursor-pointer transition-all ${
-                    language === lang ? 'ring-2' : 'hover:bg-white/5'
+                    language === lang.id ? 'ring-2' : 'hover:bg-white/5'
                   }`}
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    ringColor: colors.accent,
+                    backgroundColor: language === lang.id ? `${colors.accent}30` : 'rgba(255, 255, 255, 0.1)',
+                    // @ts-ignore
+                    '--tw-ring-color': colors.accent,
                   }}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-white capitalize">{lang}</span>
-                    {language === lang && (
-                      <div className="text-xl">✓</div>
+                    <span className="text-white">{lang.flag} {lang.label}</span>
+                    {language === lang.id && (
+                      <div className="text-xl" style={{ color: colors.accent }}>✓</div>
                     )}
                   </div>
                 </div>
               ))}
+              <div
+                className="p-4 rounded-lg opacity-50 cursor-not-allowed"
+                style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+              >
+                <span className="text-white/50">🌍 More coming soon</span>
+              </div>
             </div>
           </TypeHuntCard>
         </motion.div>

@@ -11,7 +11,7 @@ export class GameController {
       const numbers = req.query.numbers === 'true';
       const caps = req.query.caps === 'true';
 
-      const words = wordService.generateWords({ count, punctuation, numbers, capitalization: caps });
+      const words = wordService.generateWords({ count, punctuation, numbers, capitalization: caps, category: (req.query.category as string) as any || 'common' });
       res.json({ success: true, data: { words, count: words.length } });
     } catch (error) {
       next(error);

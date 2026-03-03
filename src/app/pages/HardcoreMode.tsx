@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { ArrowLeft, RotateCcw, Skull } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { api } from '../services/api';
 import { TypeHuntButton } from '../components/TypeHuntButton';
 import { TypingArea } from '../components/TypingArea';
@@ -12,6 +13,7 @@ const HardcoreMode: React.FC = () => {
   const navigate = useNavigate();
   const { colors } = useTheme();
   const { isAuthenticated } = useAuth();
+  const { wordCategory } = useSettings();
   const [words, setWords] = useState<string[]>([]);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [timeElapsed, setTimeElapsed] = useState(0);
@@ -40,7 +42,7 @@ const HardcoreMode: React.FC = () => {
 
   const generateWords = async () => {
     try {
-      const res = await api.getWords({ count: 50 });
+      const res = await api.getWords({ count: 50, category: wordCategory });
       setWords(res.data.words);
     } catch {
       const fallback = ['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog', 'and', 'runs',
