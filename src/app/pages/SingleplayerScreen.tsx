@@ -165,6 +165,7 @@ const SingleplayerScreen: React.FC = () => {
             onStart={handleStart}
             onProgress={handleProgress}
             onFinish={handleFinish}
+            onRestart={generateWords}
             accentColor={colors.accent}
           />
         </div>

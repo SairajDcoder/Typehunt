@@ -21,14 +21,10 @@ interface TypingAreaProps {
     correctWords: number;
     keystrokeTimestamps: number[];
   }) => void;
-  onMistake?: () => void; // For hardcore mode
+  onMistake?: () => void;
+  onRestart?: () => void;
   hardcoreMode?: boolean;
   accentColor?: string;
-}
-
-interface WordState {
-  typed: string;
-  isActive: boolean;
 }
 
 export const TypingArea: React.FC<TypingAreaProps> = ({
@@ -38,6 +34,7 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
   onProgress,
   onFinish,
   onMistake,
+  onRestart,
   hardcoreMode = false,
   accentColor = '#9CD5FF',
 }) => {
@@ -48,9 +45,16 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
   const [started, setStarted] = useState(false);
   const [finished, setFinished] = useState(false);
   const [keystrokeTimestamps, setKeystrokeTimestamps] = useState<number[]>([]);
+  const [isFocused, setIsFocused] = useState(false);
+  const [tabPressed, setTabPressed] = useState(false);
+
+  // Smooth caret state
+  const [caretPos, setCaretPos] = useState({ left: 0, top: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const wordsContainerRef = useRef<HTMLDivElement>(null);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
   const activeWordRef = useRef<HTMLSpanElement>(null);
+  const charRefs = useRef<Map<string, HTMLSpanElement>>(new Map());
 
   // Reset when words change
   useEffect(() => {
@@ -60,8 +64,62 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
     setStarted(false);
     setFinished(false);
     setKeystrokeTimestamps([]);
-    hiddenInputRef.current?.focus();
+    setTabPressed(false);
+    charRefs.current.clear();
+    setTimeout(() => {
+      hiddenInputRef.current?.focus();
+      updateCaretPosition(0, '');
+    }, 50);
   }, [words]);
+
+  // Update caret position smoothly
+  const updateCaretPosition = useCallback((wordIdx: number, input: string) => {
+    if (!wordsContainerRef.current) return;
+
+    const charIdx = input.length;
+    const word = words[wordIdx] || '';
+
+    // Find the right character element to position the caret next to
+    let targetKey: string;
+    if (charIdx < word.length) {
+      targetKey = `char-${wordIdx}-${charIdx}`;
+    } else if (charIdx >= word.length && charIdx > 0) {
+      // Caret is after the last char or after extra chars
+      targetKey = `char-${wordIdx}-${charIdx - 1}`;
+    } else {
+      targetKey = `char-${wordIdx}-0`;
+    }
+
+    const charEl = charRefs.current.get(targetKey);
+    const container = wordsContainerRef.current;
+
+    if (charEl && container) {
+      const containerRect = container.getBoundingClientRect();
+      const charRect = charEl.getBoundingClientRect();
+
+      let left: number;
+      if (charIdx < word.length) {
+        // Before the character
+        left = charRect.left - containerRect.left;
+      } else {
+        // After the character
+        left = charRect.right - containerRect.left;
+      }
+
+      setCaretPos({
+        left,
+        top: charRect.top - containerRect.top,
+        height: charRect.height,
+      });
+    }
+  }, [words]);
+
+  // Update caret whenever typing state changes
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      updateCaretPosition(currentWordIndex, currentInput);
+    });
+  }, [currentWordIndex, currentInput, updateCaretPosition]);
 
   // Auto-scroll to keep active word visible
   useEffect(() => {
@@ -71,49 +129,45 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
       const containerRect = container.getBoundingClientRect();
       const wordRect = activeWord.getBoundingClientRect();
 
-      // If the active word is below the visible area, scroll
       if (wordRect.top > containerRect.top + containerRect.height * 0.6) {
         container.scrollTop += wordRect.top - containerRect.top - containerRect.height * 0.3;
       }
     }
   }, [currentWordIndex]);
 
-  // Focus hidden input on click
   const handleContainerClick = () => {
     if (!disabled && !finished) {
       hiddenInputRef.current?.focus();
     }
   };
 
-  const getStats = useCallback(() => {
-    let correctChars = 0;
-    let totalChars = 0;
-    let correctWords = 0;
-
-    for (let i = 0; i < wordHistory.length; i++) {
-      const typed = wordHistory[i];
+  const computeStats = (history: string[]) => {
+    let cc = 0, tc = 0, cw = 0;
+    for (let i = 0; i < history.length; i++) {
+      const typed = history[i];
       const target = words[i];
-      totalChars += target.length;
-
-      if (typed === target) {
-        correctChars += target.length;
-        correctWords++;
-      } else {
-        for (let j = 0; j < target.length; j++) {
-          if (typed[j] === target[j]) correctChars++;
-        }
-      }
+      tc += target.length;
+      if (typed === target) { cc += target.length; cw++; }
+      else { for (let j = 0; j < target.length; j++) if (typed[j] === target[j]) cc++; }
     }
-
-    return { correctChars, totalChars, correctWords };
-  }, [wordHistory, words]);
+    return { correctChars: cc, totalChars: tc, correctWords: cw };
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (disabled || finished || words.length === 0) return;
 
-    // Prevent default for Tab
+    // Tab+Enter restart
     if (e.key === 'Tab') {
       e.preventDefault();
+      setTabPressed(true);
+      setTimeout(() => setTabPressed(false), 500);
+      return;
+    }
+
+    if (e.key === 'Enter' && tabPressed) {
+      e.preventDefault();
+      setTabPressed(false);
+      onRestart?.();
       return;
     }
 
@@ -123,15 +177,12 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
     }
 
     setKeystrokeTimestamps((prev) => [...prev, Date.now()]);
-
-    // Play keystroke sound
     playKeystrokeSound(keyboardSound, soundEnabled);
 
     if (e.key === ' ') {
       e.preventDefault();
-      if (currentInput.length === 0) return; // Don't allow empty words
+      if (currentInput.length === 0) return;
 
-      // Check hardcore mode — immediate fail on wrong word
       if (hardcoreMode && currentInput !== words[currentWordIndex]) {
         onMistake?.();
         return;
@@ -139,72 +190,27 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
 
       const newHistory = [...wordHistory, currentInput];
       setWordHistory(newHistory);
-
       const nextIndex = currentWordIndex + 1;
 
       if (nextIndex >= words.length) {
-        // Finished!
         setFinished(true);
         setCurrentInput('');
-        const { correctChars, totalChars, correctWords } = (() => {
-          let cc = 0, tc = 0, cw = 0;
-          for (let i = 0; i < newHistory.length; i++) {
-            const typed = newHistory[i];
-            const target = words[i];
-            tc += target.length;
-            if (typed === target) { cc += target.length; cw++; }
-            else { for (let j = 0; j < target.length; j++) if (typed[j] === target[j]) cc++; }
-          }
-          return { correctChars: cc, totalChars: tc, correctWords: cw };
-        })();
-
-        onFinish?.({
-          typedWords: newHistory,
-          correctChars,
-          totalChars,
-          correctWords,
-          keystrokeTimestamps,
-        });
+        const stats = computeStats(newHistory);
+        onFinish?.({ typedWords: newHistory, ...stats, keystrokeTimestamps });
       } else {
         setCurrentWordIndex(nextIndex);
         setCurrentInput('');
-
-        // Progress callback
-        const { correctChars, totalChars, correctWords } = (() => {
-          let cc = 0, tc = 0, cw = 0;
-          for (let i = 0; i < newHistory.length; i++) {
-            const typed = newHistory[i];
-            const target = words[i];
-            tc += target.length;
-            if (typed === target) { cc += target.length; cw++; }
-            else { for (let j = 0; j < target.length; j++) if (typed[j] === target[j]) cc++; }
-          }
-          return { correctChars: cc, totalChars: tc, correctWords: cw };
-        })();
-
-        onProgress?.({
-          currentWordIndex: nextIndex,
-          typedWords: newHistory,
-          correctChars,
-          totalChars,
-          correctWords,
-          keystrokeTimestamps,
-        });
+        const stats = computeStats(newHistory);
+        onProgress?.({ currentWordIndex: nextIndex, typedWords: newHistory, ...stats, keystrokeTimestamps });
       }
     } else if (e.key === 'Backspace') {
       if (currentInput.length > 0) {
         setCurrentInput((prev) => prev.slice(0, -1));
       }
-      // In hardcore mode, check if partial input still matches
-      if (hardcoreMode) {
-        const newInput = currentInput.slice(0, -1);
-        // Allow backspace (partial re-check happens on next character)
-      }
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const newInput = currentInput + e.key;
       setCurrentInput(newInput);
 
-      // Hardcore mode — check character-level correctness
       if (hardcoreMode) {
         const target = words[currentWordIndex];
         if (newInput.length <= target.length) {
@@ -216,6 +222,13 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
       }
     }
   };
+
+  // Register a char ref
+  const setCharRef = useCallback((key: string, el: HTMLSpanElement | null) => {
+    if (el) {
+      charRefs.current.set(key, el);
+    }
+  }, []);
 
   // Render a single word with character-level coloring
   const renderWord = (word: string, wordIndex: number) => {
@@ -232,102 +245,58 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
 
     const chars: React.ReactNode[] = [];
 
-    // Render each character of the target word
     for (let i = 0; i < word.length; i++) {
       let color: string;
-      let className = '';
 
       if (isFuture || (!isActive && !isCompleted)) {
-        // Untyped future word
         color = 'rgba(255, 255, 255, 0.35)';
       } else if (i < typedForWord.length) {
-        // Character has been typed
-        if (typedForWord[i] === word[i]) {
-          color = 'rgba(255, 255, 255, 0.9)'; // Correct = bright white
-        } else {
-          color = '#e74c3c'; // Wrong = red
-        }
-      } else if (isCompleted) {
-        // Word completed but this char wasn't typed (word was shorter)
-        color = 'rgba(255, 255, 255, 0.35)';
+        color = typedForWord[i] === word[i] ? 'rgba(255, 255, 255, 0.9)' : '#e74c3c';
       } else {
-        // Upcoming char in current word
         color = 'rgba(255, 255, 255, 0.35)';
       }
 
-      // Cursor: blinking left border on the current character
-      const isCursorHere = isActive && i === typedForWord.length;
-
+      const charKey = `char-${wordIndex}-${i}`;
       chars.push(
         <span
-          key={i}
-          style={{ color, position: 'relative' }}
+          key={charKey}
+          ref={(el) => setCharRef(charKey, el)}
+          style={{ color }}
         >
-          {isCursorHere && (
-            <span
-              className="typing-cursor"
-              style={{
-                position: 'absolute',
-                left: '-1px',
-                top: '2px',
-                bottom: '2px',
-                width: '2px',
-                backgroundColor: accentColor,
-                animation: 'cursorBlink 1s step-end infinite',
-              }}
-            />
-          )}
           {word[i]}
         </span>
       );
     }
 
-    // Extra typed characters beyond the word length (in red)
+    // Extra typed characters beyond word length
     if (typedForWord.length > word.length) {
       for (let i = word.length; i < typedForWord.length; i++) {
+        const extraKey = `char-${wordIndex}-${i}`;
         chars.push(
-          <span key={`extra-${i}`} style={{ color: '#e74c3c', textDecoration: 'line-through', opacity: 0.8 }}>
+          <span
+            key={extraKey}
+            ref={(el) => setCharRef(extraKey, el)}
+            style={{ color: '#e74c3c', opacity: 0.7, fontSize: '0.85em' }}
+          >
             {typedForWord[i]}
           </span>
         );
       }
     }
 
-    // If this is the active word and cursor is at the end but within word length range
-    // and we haven't added a cursor yet (e.g., cursor is after the last char)
-    if (isActive && typedForWord.length === word.length) {
-      // Cursor after the last character
-      chars.push(
-        <span key="cursor-end" style={{ position: 'relative' }}>
-          <span
-            className="typing-cursor"
-            style={{
-              position: 'absolute',
-              left: '0px',
-              top: '2px',
-              bottom: '2px',
-              width: '2px',
-              backgroundColor: accentColor,
-              animation: 'cursorBlink 1s step-end infinite',
-            }}
-          />
-        </span>
-      );
-    }
-
-    // If active word and cursor is at position 0 (no chars typed yet, cursor before first char)
-    // We handled this in the loop above (i === 0 && typedForWord.length === 0)
-
     return (
       <span
         key={wordIndex}
         ref={isActive ? activeWordRef : undefined}
-        className="inline-block mr-[10px] mb-[6px]"
+        className="inline-block"
         style={{
+          marginRight: '12px',
+          marginBottom: '4px',
+          paddingBottom: '2px',
           borderBottom: isCompleted
             ? typedForWord === word
               ? 'none'
-              : '2px solid #e74c3c'
+              : '2px solid rgba(231, 76, 60, 0.6)'
             : 'none',
         }}
       >
@@ -339,7 +308,7 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
   return (
     <>
       <style>{`
-        @keyframes cursorBlink {
+        @keyframes caretBlink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
         }
@@ -349,22 +318,21 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
         onClick={handleContainerClick}
         className="relative cursor-text"
         style={{
-          maxHeight: '160px',
+          maxHeight: '180px',
           overflow: 'hidden',
-          lineHeight: '2.2',
-          fontSize: '1.5rem',
-          fontFamily: "'Roboto Mono', 'Fira Code', 'Courier New', monospace",
           outline: 'none',
           userSelect: 'none',
         }}
       >
-        {/* Hidden input to capture keystrokes */}
+        {/* Hidden input */}
         <input
           ref={hiddenInputRef}
           type="text"
           value=""
-          onChange={() => {}} // Controlled by onKeyDown
+          onChange={() => {}}
           onKeyDown={handleKeyDown}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           style={{
             position: 'absolute',
             opacity: 0,
@@ -380,19 +348,55 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
           disabled={disabled || finished}
         />
 
-        {/* Rendered words */}
-        <div className="flex flex-wrap">
+        {/* Words container (caret positions relative to this) */}
+        <div
+          ref={wordsContainerRef}
+          className="relative flex flex-wrap"
+          style={{
+            lineHeight: '2.4',
+            fontSize: '1.4rem',
+            fontFamily: "'Roboto Mono', 'Fira Code', 'Courier New', monospace",
+            letterSpacing: '0.02em',
+          }}
+        >
+          {/* Smooth animated caret */}
+          {!disabled && !finished && isFocused && (
+            <div
+              style={{
+                position: 'absolute',
+                left: `${caretPos.left}px`,
+                top: `${caretPos.top}px`,
+                width: '2.5px',
+                height: `${caretPos.height || 28}px`,
+                backgroundColor: accentColor,
+                borderRadius: '2px',
+                transition: 'left 80ms ease-out, top 80ms ease-out',
+                animation: started ? 'none' : 'caretBlink 1s step-end infinite',
+                zIndex: 10,
+                pointerEvents: 'none',
+                boxShadow: `0 0 8px ${accentColor}60`,
+              }}
+            />
+          )}
+
           {words.map((word, i) => renderWord(word, i))}
         </div>
 
-        {/* Click-to-focus overlay when not focused */}
-        {!disabled && !finished && (
+        {/* Blur overlay — show when not focused */}
+        {!disabled && !finished && !isFocused && (
           <div
-            className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-            style={{ background: 'rgba(0,0,0,0.3)' }}
+            className="absolute inset-0 flex items-center justify-center rounded-xl backdrop-blur-sm transition-opacity"
+            style={{ background: 'rgba(0,0,0,0.4)' }}
             onClick={handleContainerClick}
           >
-            <span className="text-white/60 text-lg">Click here to type</span>
+            <span className="text-white/70 text-lg font-medium tracking-wide">Click here or press any key to focus</span>
+          </div>
+        )}
+
+        {/* Tab+Enter hint */}
+        {started && !finished && (
+          <div className="absolute bottom-0 right-0 text-white/20 text-xs px-2 py-1">
+            Tab + Enter to restart
           </div>
         )}
       </div>

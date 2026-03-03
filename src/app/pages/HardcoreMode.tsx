@@ -168,6 +168,7 @@ const HardcoreMode: React.FC = () => {
                 onProgress={handleProgress}
                 onFinish={handleFinish}
                 onMistake={handleMistake}
+                onRestart={generateWords}
                 accentColor="#dc2626"
               />
             </div>
