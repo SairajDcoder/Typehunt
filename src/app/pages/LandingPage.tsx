@@ -5,12 +5,14 @@ import { Zap, Users, Skull, User, Settings, LogIn, LogOut } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { TypeHuntButton } from '../components/TypeHuntButton';
+import { api } from '../services/api';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const { colors } = useTheme();
   const { user, isAuthenticated, logout } = useAuth();
   const [cursorVisible, setCursorVisible] = useState(true);
+  const [stats, setStats] = useState({ playersOnline: 0, activeMatches: 0, avgWpm: 0 });
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -18,6 +20,24 @@ const LandingPage: React.FC = () => {
     }, 530);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch live stats
+  useEffect(() => {
+    api.getLiveStats()
+      .then((res) => {
+        if (res.data) {
+          setStats(res.data);
+        }
+      })
+      .catch(() => {
+        // Fallback — keep zeros
+      });
+  }, []);
+
+  const formatNumber = (n: number) => {
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+    return String(n);
+  };
 
   return (
     <div
@@ -27,7 +47,7 @@ const LandingPage: React.FC = () => {
       }}
     >
       {/* Header */}
-      <header className="flex justify-between items-center p-8">
+      <header className="flex justify-between items-center p-8 relative z-50">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -41,52 +61,43 @@ const LandingPage: React.FC = () => {
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="flex gap-4 items-center"
+          className="flex items-center gap-6"
+          style={{ position: 'relative', zIndex: 50 }}
         >
-          {isAuthenticated ? (
+          {isAuthenticated && user ? (
             <>
-              <span className="text-white/80 text-sm">
-                Hey, <strong>{user?.username}</strong>
-              </span>
-              <button
-                onClick={() => navigate('/profile')}
-                className="px-6 py-2 rounded-lg text-white hover:bg-white/10 transition-colors flex items-center gap-2"
-              >
-                <User size={20} />
-                Profile
+              <span className="text-white/80">Hey, {user.username}</span>
+              <button type="button" onClick={() => navigate('/profile')} className="flex items-center gap-2 text-white hover:text-white/80 transition-colors cursor-pointer">
+                <User size={18} />
+                <span>Profile</span>
               </button>
-              <button
-                onClick={() => navigate('/settings')}
-                className="px-6 py-2 rounded-lg text-white hover:bg-white/10 transition-colors flex items-center gap-2"
-              >
-                <Settings size={20} />
-                Settings
+              <button type="button" onClick={() => navigate('/settings')} className="flex items-center gap-2 text-white hover:text-white/80 transition-colors cursor-pointer">
+                <Settings size={18} />
+                <span>Settings</span>
               </button>
-              <button
-                onClick={logout}
-                className="px-6 py-2 rounded-lg text-white hover:bg-white/10 transition-colors flex items-center gap-2"
-              >
-                <LogOut size={20} />
-                Logout
+              <button type="button" onClick={logout} className="flex items-center gap-2 text-white/60 hover:text-white/80 transition-colors cursor-pointer">
+                <LogOut size={18} />
+                <span>Logout</span>
               </button>
             </>
           ) : (
-            <button
-              onClick={() => navigate('/auth')}
-              className="px-6 py-2 rounded-lg text-white hover:bg-white/10 transition-colors flex items-center gap-2"
-              style={{ border: `1px solid ${colors.accent}` }}
-            >
-              <LogIn size={20} />
-              Login / Sign Up
-            </button>
+            <>
+              <button type="button" onClick={() => navigate('/settings')} className="flex items-center gap-2 text-white hover:text-white/80 transition-colors cursor-pointer">
+                <Settings size={18} />
+                <span>Settings</span>
+              </button>
+              <button type="button" onClick={() => navigate('/auth')} className="flex items-center gap-2 text-white hover:text-white/80 transition-colors cursor-pointer">
+                <LogIn size={18} />
+                <span>Login</span>
+              </button>
+            </>
           )}
         </motion.div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col items-center justify-center px-8 pb-16">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 -mt-20">
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
           className="text-center mb-12"
@@ -141,7 +152,7 @@ const LandingPage: React.FC = () => {
           </TypeHuntButton>
         </motion.div>
 
-        {/* Live Stats Preview */}
+        {/* Live Stats */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -149,15 +160,15 @@ const LandingPage: React.FC = () => {
           className="mt-16 grid grid-cols-3 gap-8 text-center"
         >
           <div>
-            <div className="text-5xl text-white mb-2">2.4K</div>
-            <div className="text-white/70">Players Online</div>
+            <div className="text-5xl text-white mb-2">{formatNumber(stats.playersOnline)}</div>
+            <div className="text-white/70">Players</div>
           </div>
           <div>
-            <div className="text-5xl text-white mb-2">156</div>
+            <div className="text-5xl text-white mb-2">{stats.activeMatches}</div>
             <div className="text-white/70">Active Matches</div>
           </div>
           <div>
-            <div className="text-5xl text-white mb-2">98</div>
+            <div className="text-5xl text-white mb-2">{stats.avgWpm || '—'}</div>
             <div className="text-white/70">Avg WPM</div>
           </div>
         </motion.div>

@@ -85,6 +85,10 @@ class ApiClient {
     return this.request<any>(`/game/words?${params.toString()}`);
   }
 
+  async getLiveStats() {
+    return this.request<any>('/game/stats');
+  }
+
   async submitSingleplayer(data: {
     wordSet: string[];
     typedWords: string[];

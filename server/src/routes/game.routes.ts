@@ -42,6 +42,9 @@ const router = Router();
  */
 router.get('/words', (req, res, next) => gameController.generateWords(req, res, next));
 
+// Public stats endpoint for landing page
+router.get('/stats', (req, res, next) => gameController.getLiveStats(req, res, next));
+
 /**
  * @swagger
  * /game/submit:

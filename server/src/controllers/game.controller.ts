@@ -1,7 +1,11 @@
-import { Response, NextFunction } from 'express';
+import { Response, NextFunction, Request } from 'express';
 import { wordService } from '../services/word.service.js';
 import { gameService } from '../services/game.service.js';
 import { AuthRequest } from '../types/index.js';
+import { redis } from '../config/redis.js';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export class GameController {
   async generateWords(req: AuthRequest, res: Response, next: NextFunction) {
@@ -54,6 +58,49 @@ export class GameController {
       res.json({ success: true, data: results });
     } catch (error) {
       next(error);
+    }
+  }
+  async getLiveStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      // Count total registered users
+      const totalUsers = await prisma.user.count();
+
+      // Count active lobbies from Redis
+      let activeMatches = 0;
+      try {
+        const keys = await redis.keys('lobby:*');
+        activeMatches = keys.length;
+      } catch {
+        activeMatches = 0;
+      }
+
+      // Get average WPM from recent games (last 100)
+      const recentGames = await prisma.gameResult.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: { wpm: true },
+      });
+
+      let avgWpm = 0;
+      if (recentGames.length > 0) {
+        const totalWpm = recentGames.reduce((sum: number, g: { wpm: number }) => sum + g.wpm, 0);
+        avgWpm = Math.round(totalWpm / recentGames.length);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          playersOnline: totalUsers,
+          activeMatches,
+          avgWpm,
+        },
+      });
+    } catch (error) {
+      // Return fallback on error
+      res.json({
+        success: true,
+        data: { playersOnline: 0, activeMatches: 0, avgWpm: 0 },
+      });
     }
   }
 }
