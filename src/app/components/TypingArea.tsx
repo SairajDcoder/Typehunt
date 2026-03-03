@@ -50,6 +50,8 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
 
   // Smooth caret state
   const [caretPos, setCaretPos] = useState({ left: 0, top: 0, height: 0 });
+  const [lineOffset, setLineOffset] = useState(0); // How many lines to shift up
+  const lineHeightRef = useRef(0); // Computed line height in px
   const containerRef = useRef<HTMLDivElement>(null);
   const wordsContainerRef = useRef<HTMLDivElement>(null);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
@@ -65,6 +67,7 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
     setFinished(false);
     setKeystrokeTimestamps([]);
     setTabPressed(false);
+    setLineOffset(0);
     charRefs.current.clear();
     setTimeout(() => {
       hiddenInputRef.current?.focus();
@@ -121,19 +124,43 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
     });
   }, [currentWordIndex, currentInput, updateCaretPosition]);
 
-  // Auto-scroll to keep active word visible
+  // MonkeyType-style line scrolling: detect which line the active word is on,
+  // and shift the container so only 3 lines are visible at a time.
   useEffect(() => {
-    if (activeWordRef.current && containerRef.current) {
-      const container = containerRef.current;
-      const activeWord = activeWordRef.current;
-      const containerRect = container.getBoundingClientRect();
-      const wordRect = activeWord.getBoundingClientRect();
+    if (!activeWordRef.current || !wordsContainerRef.current) return;
 
-      if (wordRect.top > containerRect.top + containerRect.height * 0.6) {
-        container.scrollTop += wordRect.top - containerRect.top - containerRect.height * 0.3;
+    const wordsContainer = wordsContainerRef.current;
+    const firstChar = wordsContainer.querySelector('span[class="inline-block"]') as HTMLElement;
+    if (!firstChar) return;
+
+    const containerTop = wordsContainer.getBoundingClientRect().top;
+    const firstWordTop = firstChar.getBoundingClientRect().top;
+    const activeWordTop = activeWordRef.current.getBoundingClientRect().top;
+
+    // Calculate line height from the actual rendered elements
+    const allWords = wordsContainer.querySelectorAll('span[class="inline-block"]');
+    let computedLineHeight = 0;
+    if (allWords.length >= 2) {
+      const tops = new Set<number>();
+      allWords.forEach(w => tops.add(Math.round(w.getBoundingClientRect().top)));
+      const sortedTops = Array.from(tops).sort((a, b) => a - b);
+      if (sortedTops.length >= 2) {
+        computedLineHeight = sortedTops[1] - sortedTops[0];
+        lineHeightRef.current = computedLineHeight;
       }
     }
-  }, [currentWordIndex]);
+
+    if (!computedLineHeight) computedLineHeight = lineHeightRef.current || 48;
+
+    // Which line is the active word on (0-indexed, accounting for current offset)?
+    const rawLine = Math.round((activeWordTop - firstWordTop) / computedLineHeight);
+    const visibleLine = rawLine - lineOffset;
+
+    // When active word is on visible line 2 (3rd line, 0-indexed), shift up
+    if (visibleLine >= 2) {
+      setLineOffset(rawLine - 1); // Make the active line the 2nd visible line
+    }
+  }, [currentWordIndex, lineOffset]);
 
   const handleContainerClick = () => {
     if (!disabled && !finished) {
@@ -219,6 +246,18 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
             return;
           }
         }
+      }
+
+      // Auto-finish: if this is the last word and input matches its length, end the game
+      const isLastWord = currentWordIndex === words.length - 1;
+      const targetWord = words[currentWordIndex];
+      if (isLastWord && newInput.length >= targetWord.length) {
+        const newHistory = [...wordHistory, newInput];
+        setWordHistory(newHistory);
+        setFinished(true);
+        setCurrentInput('');
+        const stats = computeStats(newHistory);
+        onFinish?.({ typedWords: newHistory, ...stats, keystrokeTimestamps });
       }
     }
   };
@@ -318,7 +357,7 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
         onClick={handleContainerClick}
         className="relative cursor-text"
         style={{
-          maxHeight: '180px',
+          height: `${(lineHeightRef.current || 48) * 3}px`, // Show exactly 3 lines
           overflow: 'hidden',
           outline: 'none',
           userSelect: 'none',
@@ -357,6 +396,8 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
             fontSize: '1.4rem',
             fontFamily: "'Roboto Mono', 'Fira Code', 'Courier New', monospace",
             letterSpacing: '0.02em',
+            transform: `translateY(-${lineOffset * (lineHeightRef.current || 48)}px)`,
+            transition: 'transform 200ms ease-out',
           }}
         >
           {/* Smooth animated caret */}

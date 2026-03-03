@@ -31,8 +31,9 @@ const LandingPage: React.FC = () => {
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-2"
+          className="flex items-center gap-3"
         >
+          <img src="/typehunt-logo.png" alt="TypeHunt" className="w-10 h-10 rounded-lg" />
           <h1 className="text-4xl text-white">
             TypeHunt<span style={{ opacity: cursorVisible ? 1 : 0 }}>|</span>
           </h1>
