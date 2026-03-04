@@ -40,13 +40,51 @@ const ProfileDashboard: React.FC = () => {
           api.getGameHistory(20),
         ]);
 
-        setStats(statsRes.data);
+        // The backend returns stats nested by game mode:
+        // { singleplayer: { gamesPlayed, avgWpm, avgAccuracy, bestWpm }, hardcore: {...}, multiplayer: {...}, ranking: {...} }
+        // Aggregate into flat totals for the dashboard
+        const raw = statsRes.data;
+        const sp = raw?.singleplayer || {};
+        const hc = raw?.hardcore || {};
+        const mp = raw?.multiplayer || {};
+
+        const totalGames = (sp.gamesPlayed || 0) + (hc.gamesPlayed || 0) + (mp.gamesPlayed || 0);
+        const bestWpm = Math.max(sp.bestWpm || 0, hc.bestWpm || 0);
+
+        // Weighted average WPM & accuracy across modes
+        let avgWpm = 0;
+        let avgAccuracy = 0;
+        const totalWithWpm = (sp.gamesPlayed || 0) + (hc.gamesPlayed || 0) + (mp.gamesPlayed || 0);
+        if (totalWithWpm > 0) {
+          avgWpm = (
+            (sp.avgWpm || 0) * (sp.gamesPlayed || 0) +
+            (hc.avgWpm || 0) * (hc.gamesPlayed || 0) +
+            (mp.avgWpm || 0) * (mp.gamesPlayed || 0)
+          ) / totalWithWpm;
+
+          const totalWithAcc = (sp.gamesPlayed || 0) + (hc.gamesPlayed || 0);
+          if (totalWithAcc > 0) {
+            avgAccuracy = (
+              (sp.avgAccuracy || 0) * (sp.gamesPlayed || 0) +
+              (hc.avgAccuracy || 0) * (hc.gamesPlayed || 0)
+            ) / totalWithAcc;
+          }
+        }
+
+        setStats({
+          totalGames,
+          bestWpm: Math.round(bestWpm),
+          avgWpm: Math.round(avgWpm),
+          avgAccuracy: Math.round(avgAccuracy * 10) / 10,
+          ranking: raw?.ranking,
+        });
+
         setHistory(historyRes.data?.results || []);
 
         // Build progress data from history (last 7 games)
         const recent = (historyRes.data?.results || []).slice(0, 7).reverse();
         setProgressData(
-          recent.map((g: GameHistoryItem, i: number) => ({
+          recent.map((g: GameHistoryItem) => ({
             date: new Date(g.createdAt).toLocaleDateString('en-US', { weekday: 'short' }),
             wpm: g.wpm,
           }))
@@ -152,7 +190,7 @@ const ProfileDashboard: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <TypeHuntBadge rank={getRankFromElo(stats?.ranking?.eloRating || 1000)} />
+              <TypeHuntBadge rank={getRankFromElo(stats?.ranking?.elo || 1000)} />
             </div>
           </TypeHuntCard>
         </motion.div>
