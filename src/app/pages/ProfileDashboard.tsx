@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { ArrowLeft, Trophy, Target, TrendingUp, LogIn } from 'lucide-react';
+import { ArrowLeft, Trophy, Target, TrendingUp, LogIn, Type, Clock, PenTool, Skull, Users } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
@@ -20,15 +20,28 @@ interface GameHistoryItem {
   hardcore: boolean;
 }
 
+type StatsTab = 'all' | 'words' | 'time' | 'custom' | 'hardcore' | 'multiplayer';
+
+const STATS_TABS: { id: StatsTab; label: string; icon: React.ElementType }[] = [
+  { id: 'all', label: 'All', icon: Trophy },
+  { id: 'words', label: 'Words', icon: Type },
+  { id: 'time', label: 'Time', icon: Clock },
+  { id: 'custom', label: 'Custom', icon: PenTool },
+  { id: 'hardcore', label: 'Hardcore', icon: Skull },
+  { id: 'multiplayer', label: 'Multi', icon: Users },
+];
+
 const ProfileDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { colors } = useTheme();
   const { user, isAuthenticated } = useAuth();
 
+  const [rawStats, setRawStats] = useState<any>(null);
   const [stats, setStats] = useState<any>(null);
   const [history, setHistory] = useState<GameHistoryItem[]>([]);
   const [progressData, setProgressData] = useState<{ date: string; wpm: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<StatsTab>('all');
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -40,10 +53,10 @@ const ProfileDashboard: React.FC = () => {
           api.getGameHistory(20),
         ]);
 
-        // The backend returns stats nested by game mode:
-        // { singleplayer: { gamesPlayed, avgWpm, avgAccuracy, bestWpm }, hardcore: {...}, multiplayer: {...}, ranking: {...} }
-        // Aggregate into flat totals for the dashboard
         const raw = statsRes.data;
+        setRawStats(raw);
+
+        // Compute the "all" aggregate
         const sp = raw?.singleplayer || {};
         const hc = raw?.hardcore || {};
         const mp = raw?.multiplayer || {};
@@ -51,7 +64,6 @@ const ProfileDashboard: React.FC = () => {
         const totalGames = (sp.gamesPlayed || 0) + (hc.gamesPlayed || 0) + (mp.gamesPlayed || 0);
         const bestWpm = Math.max(sp.bestWpm || 0, hc.bestWpm || 0);
 
-        // Weighted average WPM & accuracy across modes
         let avgWpm = 0;
         let avgAccuracy = 0;
         const totalWithWpm = (sp.gamesPlayed || 0) + (hc.gamesPlayed || 0) + (mp.gamesPlayed || 0);
@@ -81,7 +93,6 @@ const ProfileDashboard: React.FC = () => {
 
         setHistory(historyRes.data?.results || []);
 
-        // Build progress data from history (last 7 games)
         const recent = (historyRes.data?.results || []).slice(0, 7).reverse();
         setProgressData(
           recent.map((g: GameHistoryItem) => ({
@@ -98,6 +109,31 @@ const ProfileDashboard: React.FC = () => {
 
     loadData();
   }, [isAuthenticated]);
+
+  const getTabStats = () => {
+    if (!rawStats) return { gamesPlayed: 0, bestWpm: 0, avgWpm: 0, avgAccuracy: 0 };
+
+    switch (activeTab) {
+      case 'words':
+        return rawStats.subModes?.words || { gamesPlayed: 0, bestWpm: 0, avgWpm: 0, avgAccuracy: 0 };
+      case 'time':
+        return rawStats.subModes?.time || { gamesPlayed: 0, bestWpm: 0, avgWpm: 0, avgAccuracy: 0 };
+      case 'custom':
+        return rawStats.subModes?.custom || { gamesPlayed: 0, bestWpm: 0, avgWpm: 0, avgAccuracy: 0 };
+      case 'hardcore':
+        return rawStats.hardcore || { gamesPlayed: 0, bestWpm: 0, avgWpm: 0, avgAccuracy: 0 };
+      case 'multiplayer':
+        return { ...rawStats.multiplayer, bestWpm: 0, avgAccuracy: 0 } || { gamesPlayed: 0, bestWpm: 0, avgWpm: 0, avgAccuracy: 0 };
+      case 'all':
+      default:
+        return {
+          gamesPlayed: stats?.totalGames || 0,
+          bestWpm: stats?.bestWpm || 0,
+          avgWpm: stats?.avgWpm || 0,
+          avgAccuracy: stats?.avgAccuracy || 0,
+        };
+    }
+  };
 
   if (!isAuthenticated) {
     return (
@@ -152,6 +188,8 @@ const ProfileDashboard: React.FC = () => {
     return date.toLocaleDateString();
   };
 
+  const tabStats = getTabStats();
+
   return (
     <div
       className="min-h-screen p-8"
@@ -160,8 +198,9 @@ const ProfileDashboard: React.FC = () => {
       }}
     >
       <button
+        type="button"
         onClick={() => navigate('/')}
-        className="flex items-center gap-2 text-white mb-8 hover:opacity-80 transition-opacity"
+        className="flex items-center gap-2 text-white mb-8 hover:opacity-80 transition-opacity cursor-pointer"
       >
         <ArrowLeft size={20} />
         Back to Home
@@ -195,6 +234,32 @@ const ProfileDashboard: React.FC = () => {
           </TypeHuntCard>
         </motion.div>
 
+        {/* Mode Stats Tabs */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="mb-6"
+        >
+          <div className="flex rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}>
+            {STATS_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className="flex-1 flex items-center justify-center gap-2 py-3 px-3 text-sm font-medium transition-all cursor-pointer"
+                style={{
+                  backgroundColor: activeTab === tab.id ? colors.accent : 'transparent',
+                  color: activeTab === tab.id ? '#fff' : 'rgba(255,255,255,0.5)',
+                }}
+              >
+                <tab.icon size={14} />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </motion.div>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
@@ -203,7 +268,7 @@ const ProfileDashboard: React.FC = () => {
                 <Trophy size={24} color={colors.accent} />
                 <span className="text-white/70 text-sm">Total Games</span>
               </div>
-              <div className="text-4xl text-white">{stats?.totalGames || 0}</div>
+              <div className="text-4xl text-white">{tabStats.gamesPlayed || 0}</div>
             </TypeHuntCard>
           </motion.div>
 
@@ -213,7 +278,7 @@ const ProfileDashboard: React.FC = () => {
                 <TrendingUp size={24} color={colors.accent} />
                 <span className="text-white/70 text-sm">Best WPM</span>
               </div>
-              <div className="text-4xl text-white">{stats?.bestWpm || 0}</div>
+              <div className="text-4xl text-white">{Math.round(tabStats.bestWpm || 0)}</div>
             </TypeHuntCard>
           </motion.div>
 
@@ -223,7 +288,7 @@ const ProfileDashboard: React.FC = () => {
                 <Target size={24} color={colors.accent} />
                 <span className="text-white/70 text-sm">Avg Accuracy</span>
               </div>
-              <div className="text-4xl text-white">{stats?.avgAccuracy ? Math.round(stats.avgAccuracy) : 0}%</div>
+              <div className="text-4xl text-white">{Math.round(tabStats.avgAccuracy || 0)}%</div>
             </TypeHuntCard>
           </motion.div>
 
@@ -233,7 +298,7 @@ const ProfileDashboard: React.FC = () => {
                 <TrendingUp size={24} color={colors.accent} />
                 <span className="text-white/70 text-sm">Avg WPM</span>
               </div>
-              <div className="text-4xl text-white">{stats?.avgWpm ? Math.round(stats.avgWpm) : 0}</div>
+              <div className="text-4xl text-white">{Math.round(tabStats.avgWpm || 0)}</div>
             </TypeHuntCard>
           </motion.div>
         </div>

@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 
 export class GameService {
   async submitSingleplayer(userId: string, submission: GameSubmission) {
-    const { wordSet, typedWords, startTime, endTime, keystrokeTimestamps } = submission;
+    const { wordSet, typedWords, startTime, endTime, keystrokeTimestamps, subMode } = submission;
 
     // Anti-cheat validation
     const timeTaken = (endTime - startTime) / 1000; // seconds
@@ -48,6 +48,7 @@ export class GameService {
       data: {
         userId,
         mode: 'SINGLE',
+        subMode: subMode || 'words',
         wpm,
         accuracy,
         timeTaken,

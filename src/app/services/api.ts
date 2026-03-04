@@ -95,6 +95,7 @@ class ApiClient {
     startTime: number;
     endTime: number;
     keystrokeTimestamps?: number[];
+    subMode?: string;
   }) {
     return this.request<any>('/game/submit', {
       method: 'POST',

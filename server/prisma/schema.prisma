@@ -47,6 +47,7 @@ model GameResult {
   id         String   @id @default(cuid())
   userId     String
   mode       GameMode
+  subMode    String?  @default("words") // "words", "time", "custom"
   wpm        Float
   accuracy   Float
   timeTaken  Float    // seconds
@@ -60,6 +61,7 @@ model GameResult {
   @@index([userId])
   @@index([mode])
   @@index([wpm])
+  @@index([subMode])
 }
 
 model Lobby {

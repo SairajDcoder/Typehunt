@@ -67,6 +67,7 @@ export interface GameSubmission {
   startTime: number;
   endTime: number;
   keystrokeTimestamps?: number[];
+  subMode?: string; // "words", "time", "custom"
 }
 
 export interface EloChange {

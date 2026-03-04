@@ -154,7 +154,7 @@ export class AuthService {
   }
 
   async getStats(userId: string) {
-    const [singleplayerStats, hardcoreStats, multiplayerStats] = await Promise.all([
+    const [singleplayerStats, hardcoreStats, multiplayerStats, wordsStats, timeStats, customStats] = await Promise.all([
       prisma.gameResult.aggregate({
         where: { userId, mode: 'SINGLE' },
         _avg: { wpm: true, accuracy: true },
@@ -172,28 +172,49 @@ export class AuthService {
         _avg: { wpm: true, accuracy: true },
         _count: true,
       }),
+      // Per-subMode breakdowns
+      prisma.gameResult.aggregate({
+        where: { userId, mode: 'SINGLE', subMode: 'words' },
+        _avg: { wpm: true, accuracy: true },
+        _max: { wpm: true },
+        _count: true,
+      }),
+      prisma.gameResult.aggregate({
+        where: { userId, mode: 'SINGLE', subMode: 'time' },
+        _avg: { wpm: true, accuracy: true },
+        _max: { wpm: true },
+        _count: true,
+      }),
+      prisma.gameResult.aggregate({
+        where: { userId, mode: 'SINGLE', subMode: 'custom' },
+        _avg: { wpm: true, accuracy: true },
+        _max: { wpm: true },
+        _count: true,
+      }),
     ]);
 
     const ranking = await prisma.ranking.findUnique({
       where: { userId },
     });
 
+    const formatAgg = (agg: any) => ({
+      gamesPlayed: agg._count,
+      avgWpm: Math.round((agg._avg.wpm || 0) * 100) / 100,
+      avgAccuracy: Math.round((agg._avg.accuracy || 0) * 100) / 100,
+      bestWpm: agg._max?.wpm || 0,
+    });
+
     return {
-      singleplayer: {
-        gamesPlayed: singleplayerStats._count,
-        avgWpm: Math.round((singleplayerStats._avg.wpm || 0) * 100) / 100,
-        avgAccuracy: Math.round((singleplayerStats._avg.accuracy || 0) * 100) / 100,
-        bestWpm: singleplayerStats._max.wpm || 0,
-      },
-      hardcore: {
-        gamesPlayed: hardcoreStats._count,
-        avgWpm: Math.round((hardcoreStats._avg.wpm || 0) * 100) / 100,
-        avgAccuracy: Math.round((hardcoreStats._avg.accuracy || 0) * 100) / 100,
-        bestWpm: hardcoreStats._max.wpm || 0,
-      },
+      singleplayer: formatAgg(singleplayerStats),
+      hardcore: formatAgg(hardcoreStats),
       multiplayer: {
         gamesPlayed: multiplayerStats._count,
         avgWpm: Math.round((multiplayerStats._avg.wpm || 0) * 100) / 100,
+      },
+      subModes: {
+        words: formatAgg(wordsStats),
+        time: formatAgg(timeStats),
+        custom: formatAgg(customStats),
       },
       ranking: ranking
         ? { elo: ranking.elo, wins: ranking.wins, losses: ranking.losses }
